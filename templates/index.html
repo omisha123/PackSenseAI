@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PackSense AI — Smarter Food Packaging</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], },
+                    colors: { brand: { 400: '#34d399', 500: '#10b981', 600: '#059669', }, },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeInUp: { '0%': { opacity: 0, transform: 'translateY(30px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1920');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+        }
+        .theme-overlay { position: fixed; inset: 0; z-index: -1; transition: background-color 0.5s ease; }
+        .dark .theme-overlay { background-color: rgba(15, 23, 42, 0.88); }
+        html:not(.dark) .theme-overlay { background-color: rgba(248, 250, 252, 0.85); }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
+        }
+        .dark .glass {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        }
+
+        .input-premium {
+            width: 100%; padding: 0.875rem 1rem; border-radius: 0.75rem;
+            background: rgba(255, 255, 255, 0.9); border: 1px solid #e2e8f0;
+            color: #0f172a; font-weight: 500; transition: all 0.2s; outline: none;
+        }
+        .dark .input-premium {
+            background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; color: #f8fafc;
+        }
+        .input-premium:focus { border-color: #10b981; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15); }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
+        #result-section .prose h1, #result-section .prose h2, #result-section .prose h3 { font-weight: 900; }
+        #result-section .prose table { display: block; overflow-x: auto; }
+        #result-section .prose table th { background: #ecfdf5; }
+        #result-section summary { list-style: none; }
+        #result-section summary::-webkit-details-marker { display: none; }
+
+        .food-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.82), rgba(236,253,245,0.72));
+            border: 1px solid rgba(16,185,129,0.18);
+        }
+        .dark .food-card {
+            background: linear-gradient(135deg, rgba(30,41,59,0.78), rgba(6,78,59,0.30));
+        }
+        .input-premium::placeholder { color: #94a3b8; }
+        select.input-premium option { background: white; color: #0f172a; }
+        .dark select.input-premium option { background: #0f172a; color: #f8fafc; }
+        
+        .md-prose h1 { font-size: 1.8rem; font-weight: 800; color: #10b981; margin-bottom: 1rem; }
+        .md-prose h2 { font-size: 1.4rem; font-weight: 700; color: #10b981; margin-top: 1.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid rgba(16,185,129,0.2); padding-bottom: 0.5rem;}
+        .md-prose h3 { font-size: 1.1rem; font-weight: 700; margin-top: 1rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+        .dark .md-prose h3 { color: #94a3b8; }
+        .md-prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1.5rem; }
+        .md-prose li { margin-bottom: 0.5rem; line-height: 1.7; }
+        .md-prose strong { color: #0f172a; }
+        .dark .md-prose strong { color: #f8fafc; }
+        .md-prose p { line-height: 1.7; margin-bottom: 1.5rem; }
+    </style>
+</head>
+<body class="text-slate-800 dark:text-slate-100 antialiased transition-colors duration-500">
+    <div class="theme-overlay"></div>
+
+    <nav class="glass sticky top-0 z-50 px-6 py-4 border-b">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl">🥭</span>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white" data-key="title">PackSense AI</h1>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-key="nav_subtitle">Smart packaging, made simple</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 md:gap-5">
+                <select id="lang-select" class="input-premium !w-auto !py-2 !pl-3 !pr-8 cursor-pointer text-sm font-bold shadow-sm hidden sm:block">
+                    <option value="English">🇬🇧 English</option>
+                    <option value="Hindi">🇮🇳 Hindi</option>
+                    <option value="Marathi">🚩 Marathi</option>
+                </select>
+                
+                <button id="theme-toggle" class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all">
+                    <svg id="icon-sun" class="w-5 h-5 hidden text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 2.32a1 1 0 011.415 0l.708.707a1 1 0 01-1.414 1.415l-.708-.707a1 1 0 010-1.415zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4.22-2.32a1 1 0 01-1.415 0l-.708-.707a1 1 0 011.414-1.415l.708.707a1 1 0 010 1.415zM3 9a1 1 0 100 2H2a1 1 0 100-2h1zM5.78 4.32a1 1 0 010 1.415l-.707.707a1 1 0 01-1.415-1.414l.707-.707a1 1 0 011.415 0zM10 5a5 5 0 100 10 5 5 0 000-10z"/></svg>
+                    <svg id="icon-moon" class="w-5 h-5 text-brand-500" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+                </button>
+
+                <div id="nav-auth-controls" class="hidden flex items-center gap-4 pl-4 border-l border-slate-300 dark:border-slate-700">
+                    <span id="welcome-msg" class="text-sm font-bold text-brand-600 dark:text-brand-400 hidden md:block"></span>
+                    <button id="btn-logout" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-red-500 hover:text-white dark:hover:bg-red-500 text-sm font-bold transition-colors">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow flex items-center justify-center p-4 sm:p-8 w-full max-w-7xl mx-auto opacity-0 animate-fade-in-up">
+        
+        <!-- 1. AUTHENTICATION SECTION -->
+        <div id="auth-section" class="w-full max-w-md">
+            <div class="glass rounded-[2rem] p-8 sm:p-10 shadow-2xl relative overflow-hidden">
+                <div class="absolute -top-24 -right-24 w-48 h-48 bg-brand-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-float"></div>
+                <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float" style="animation-delay: 2s;"></div>
+                <div class="absolute top-5 right-5 text-2xl animate-float" style="animation-delay: 1s;">🥬</div>
+                <div class="absolute bottom-5 right-8 text-xl animate-float" style="animation-delay: 3s;">🍅</div>
+                
+                <div class="text-center mb-8 relative z-10">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-100/80 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-xs font-bold mb-4" data-key="auth_tag">
+                        🌱 Made for real-world food businesses
+                    </div>
+                    <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight mb-2" data-key="welcome_back">Welcome to PackSense AI</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 font-medium max-w-sm mx-auto" data-key="auth_sub">Simple packaging guidance for farmers, food makers & businesses</p>
+                </div>
+
+                <div class="relative z-10 mb-6 rounded-2xl bg-white/60 dark:bg-slate-900/40 border border-brand-200/70 dark:border-brand-800/50 p-4">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <p class="text-xs font-extrabold uppercase tracking-wider text-brand-600 dark:text-brand-400" data-key="choose_lang">🌐 Choose your language</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1" data-key="lang_sub">The questions and AI answer will use this language.</p>
+                        </div>
+                        <select id="lang-select-home" class="input-premium !w-auto !py-2 !pl-3 !pr-8 cursor-pointer text-sm font-bold">
+                            <option value="English">🇬🇧 English</option>
+                            <option value="Hindi">🇮🇳 Hindi</option>
+                            <option value="Marathi">🚩 Marathi</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl mb-6 relative z-10 border border-slate-300 dark:border-slate-700">
+                    <button id="btn-show-login" class="flex-1 py-2 text-sm font-bold rounded-lg bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-white transition-all" data-key="login_tab">Login</button>
+                    <button id="btn-show-signup" class="flex-1 py-2 text-sm font-bold rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all" data-key="signup_tab">Sign Up</button>
+                </div>
+
+                <div class="space-y-5 relative z-10">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="username">Username</label>
+                        <input type="text" id="auth-user" class="input-premium" placeholder="Enter your username" data-placeholder-key="username_placeholder">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="password">Password</label>
+                        <input type="password" id="auth-pass" class="input-premium" placeholder="••••••••">
+                    </div>
+                    
+                    <button id="btn-submit-auth" class="w-full py-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-500 text-white font-bold text-lg shadow-lg transition-all transform hover:-translate-y-1 mt-2" data-key="submit">Secure Access</button>
+                    <p id="auth-msg" class="text-center text-sm font-bold mt-4 h-4"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. MAIN DASHBOARD SECTION (Hidden initially) -->
+        <div id="app-section" class="w-full hidden">
+            
+            <div class="glass rounded-[2rem] p-8 sm:p-12 shadow-2xl mb-8">
+                <div class="mb-10 border-b border-slate-200 dark:border-slate-700 pb-6 flex justify-between items-end">
+                    <div>
+                        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight" data-key="dash_title">Let's understand your food</h2>
+                        <p class="text-slate-500 dark:text-slate-400 mt-2 font-medium" data-key="dash_sub">You don't need to be a packaging expert. Just tell us what you're making and how you store it.</p>
+                    </div>
+                </div>
+
+                <div class="mb-8 flex flex-wrap gap-2">
+                    <span class="px-3 py-1.5 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-xs font-bold" data-key="tag1">🌾 Farmer-friendly</span>
+                    <span class="px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-bold" data-key="tag2">💰 Budget-aware</span>
+                    <span class="px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold" data-key="tag3">📦 Practical materials</span>
+                    <span class="px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold" data-key="tag4">🌱 Eco options</span>
+                </div>
+
+                <div id="input-stage">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                        <div id="main-input-area" class="lg:col-span-2 transition-all duration-500">
+                            <div class="space-y-8">
+                                <div class="food-card rounded-3xl p-6 sm:p-8 shadow-lg">
+                                    <div class="flex items-start justify-between gap-4 mb-6">
+                                        <div>
+                                            <div class="text-xs font-extrabold uppercase tracking-widest text-brand-600 dark:text-brand-400 mb-2" data-key="step1_sub">STEP 1 · THE BASICS</div>
+                                            <h3 class="text-2xl font-extrabold" data-key="step1_title">🥭 Tell us about your food</h3>
+                                            <p class="text-sm text-slate-500 dark:text-slate-400 mt-2" data-key="step1_desc">No technical knowledge needed. Just answer what you know.</p>
+                                        </div>
+                                        <div class="hidden sm:flex w-12 h-12 rounded-2xl bg-brand-100 dark:bg-brand-900/30 items-center justify-center text-2xl">🌾</div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="food_name">What food are you packaging?</label>
+                                            <input id="commodity" class="input-premium" placeholder="e.g. mangoes, chips, milk, rice" data-placeholder-key="food_placeholder">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="food_type_label">What kind of food is it?</label>
+                                            <select id="food_type" class="input-premium">
+                                                <option value="Fresh produce" data-key="opt_fresh">Fresh produce</option>
+                                                <option value="Dry / low-moisture food" data-key="opt_dry">Dry / low-moisture food</option>
+                                                <option value="Snack / fried food" data-key="opt_snack">Snack / fried food</option>
+                                                <option value="Dairy" data-key="opt_dairy">Dairy</option>
+                                                <option value="Meat / seafood" data-key="opt_meat">Meat / seafood</option>
+                                                <option value="Processed / ready-to-eat" data-key="opt_processed">Processed / ready-to-eat</option>
+                                                <option value="Other" data-key="opt_other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="shelf_life">How long should it last?</label>
+                                            <select id="shelf_life" class="input-premium">
+                                                <option value="3" data-key="opt_3days">3 days</option>
+                                                <option value="7" selected data-key="opt_7days">7 days</option>
+                                                <option value="14" data-key="opt_14days">14 days</option>
+                                                <option value="30" data-key="opt_30days">30 days</option>
+                                                <option value="60" data-key="opt_60days">60 days</option>
+                                                <option value="90" data-key="opt_90days">90+ days</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="food-card rounded-3xl p-6 sm:p-8 shadow-lg">
+                                    <div class="text-xs font-extrabold uppercase tracking-widest text-brand-600 dark:text-brand-400 mb-2" data-key="step2_sub">STEP 2 · REAL-WORLD CONDITIONS</div>
+                                    <h3 class="text-2xl font-extrabold mb-2" data-key="step2_title">❄️ Where will it live?</h3>
+                                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-key="step2_desc">These answers help us understand what your package will have to handle.</p>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="storage_type">Where will it be stored?</label>
+                                            <select id="storage_type" class="input-premium">
+                                                <option value="Room temperature" data-key="opt_room">Room temperature</option>
+                                                <option value="Refrigerated" data-key="opt_fridge">Refrigerated</option>
+                                                <option value="Frozen" data-key="opt_frozen">Frozen</option>
+                                                <option value="Warehouse" data-key="opt_warehouse">Warehouse</option>
+                                                <option value="Cold chain" data-key="opt_coldchain">Cold chain</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="transport">How will it travel?</label>
+                                            <select id="transport" class="input-premium">
+                                                <option value="Road / Truck" data-key="opt_truck">Road / Truck</option>
+                                                <option value="Local delivery" data-key="opt_local">Local delivery</option>
+                                                <option value="Sea Freight" data-key="opt_sea">Sea Freight</option>
+                                                <option value="Air Freight" data-key="opt_air">Air Freight</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="budget">What's your budget?</label>
+                                            <select id="budget" class="input-premium">
+                                                <option value="Low / Economy" data-key="opt_budget_low">Low / Economy</option>
+                                                <option value="Standard" selected data-key="opt_budget_std">Standard</option>
+                                                <option value="Premium / Export" data-key="opt_budget_high">Premium / Export</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="temp_label">Temperature (if known)</label>
+                                            <input id="temp" class="input-premium" type="number" value="25" placeholder="e.g. 25" data-placeholder-key="ex_25">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="rounded-3xl border border-dashed border-brand-300 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-950/20 p-5">
+                                    <button id="advanced-toggle" type="button" class="w-full flex items-center justify-between text-left">
+                                        <div class="flex items-center gap-3">
+                                            <span class="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center">⚙️</span>
+                                            <div>
+                                                <div class="font-extrabold"><span data-key="adv_title">Advanced details</span> <span class="text-xs font-bold text-brand-600 dark:text-brand-400 ml-1" data-key="optional">OPTIONAL</span></div>
+                                                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5" data-key="adv_desc">Only fill these in if you know them</div>
+                                            </div>
+                                        </div>
+                                        <svg id="advanced-chevron" class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+
+                                    <div id="advanced-details" class="hidden mt-6 pt-6 border-t border-brand-200 dark:border-brand-800">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="moisture">Moisture (%)</label>
+                                                <input id="moisture" class="input-premium" type="number" placeholder="e.g. 80" data-placeholder-key="ex_80">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="fat">Fat (%)</label>
+                                                <input id="fat" class="input-premium" type="number" placeholder="e.g. 15" data-placeholder-key="ex_15">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="ph">pH</label>
+                                                <input id="ph" class="input-premium" type="number" step="0.1" placeholder="e.g. 4.2" data-placeholder-key="ex_4_2">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="humidity">Humidity (% RH)</label>
+                                                <input id="humidity" class="input-premium" type="number" value="60" placeholder="e.g. 60" data-placeholder-key="ex_60">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="respiration">Respiration</label>
+                                                <select id="respiration" class="input-premium">
+                                                    <option value="Not sure" data-key="opt_resp_none">Not sure</option>
+                                                    <option value="Low" data-key="opt_resp_low">Low</option>
+                                                    <option value="Medium" data-key="opt_resp_med">Medium</option>
+                                                    <option value="High" data-key="opt_resp_high">High</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="extra_notes">Anything else?</label>
+                                                <input id="extra_notes" class="input-premium" placeholder="e.g. needs to look premium" data-placeholder-key="extra_placeholder">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <aside id="side-presets" class="lg:sticky lg:top-24 rounded-3xl bg-white/80 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 shadow-xl p-5 transition-all duration-500">
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-2xl">⚡</span>
+                                <div>
+                                    <div class="text-xs font-extrabold uppercase tracking-wider text-brand-600 dark:text-brand-400" data-key="quick_title">Quick start</div>
+                                    <h3 class="text-lg font-black" data-key="quick_start">Try an example</h3>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4" data-key="quick_desc">Not sure what to enter? Pick one and we'll fill it in.</p>
+                            
+                            <div class="space-y-2.5 mt-4">
+                                <button type="button" class="quick-preset w-full text-left p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all" data-preset="potato">
+                                    <div class="flex items-center gap-3"><span class="text-2xl">🥔</span><div><div class="font-extrabold text-sm" data-key="ex_potato">Potato chips</div><div class="text-[11px] text-slate-500" data-key="ex_potato_sub">Crispy · moisture-sensitive</div></div></div>
+                                </button>
+                                <button type="button" class="quick-preset w-full text-left p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all" data-preset="paper">
+                                    <div class="flex items-center gap-3"><span class="text-2xl">📄</span><div><div class="font-extrabold text-sm" data-key="ex_paper">Paper-packed snacks</div><div class="text-[11px] text-slate-500" data-key="ex_paper_sub">Dry food · eco-focused</div></div></div>
+                                </button>
+                                <button type="button" class="quick-preset w-full text-left p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all" data-preset="tomato">
+                                    <div class="flex items-center gap-3"><span class="text-2xl">🍅</span><div><div class="font-extrabold text-sm" data-key="ex_tomato">Fresh tomatoes</div><div class="text-[11px] text-slate-500" data-key="ex_tomato_sub">Fresh produce · breathable</div></div></div>
+                                </button>
+                                <button type="button" class="quick-preset w-full text-left p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all" data-preset="rice">
+                                    <div class="flex items-center gap-3"><span class="text-2xl">🍚</span><div><div class="font-extrabold text-sm" data-key="ex_rice">Rice</div><div class="text-[11px] text-slate-500" data-key="ex_rice_sub">Dry grain · long shelf life</div></div></div>
+                                </button>
+                                <button type="button" class="quick-preset w-full text-left p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all" data-preset="milk">
+                                    <div class="flex items-center gap-3"><span class="text-2xl">🥛</span><div><div class="font-extrabold text-sm" data-key="ex_milk">Milk</div><div class="text-[11px] text-slate-500" data-key="ex_milk_sub">Dairy · cold storage</div></div></div>
+                                </button>
+                            </div>
+                            
+                            <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                                <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-500 mb-3" data-key="history_title">Recent Searches</h3>
+                                <div id="history-list" class="space-y-2">
+                                </div>
+                            </div>
+                        </aside>
+                    </div>
+
+                    <div class="mt-12">
+                        <button id="btn-generate" class="w-full py-5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 dark:from-brand-600 dark:to-brand-500 text-white font-extrabold text-xl shadow-2xl hover:shadow-brand-500/25 transition-all transform hover:-translate-y-1 flex justify-center items-center gap-3">
+                            <svg class="w-6 h-6 text-brand-400 dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                            <span data-key="generate">✨ Show Me My Packaging Plan</span>
+                        </button>
+                        
+                        <div id="loading-msg" class="hidden flex flex-col items-center justify-center mt-10">
+                            <div class="relative w-12 h-12 mb-4">
+                                <div class="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-700"></div>
+                                <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
+                            </div>
+                            <p class="text-brand-600 dark:text-brand-400 font-bold tracking-wide animate-pulse" data-key="loading">Cooking up your packaging plan…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Output -->
+            <div id="result-section" class="hidden mt-12 animate-fade-in-up">
+                <div class="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 text-white shadow-2xl">
+                    <div class="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-lime-300/10 blur-3xl"></div>
+                    <div class="absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-cyan-300/10 blur-3xl"></div>
+                    <div class="relative p-6 sm:p-9">
+                        <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+                            <div>
+                                <div class="text-xs font-extrabold uppercase tracking-[0.2em] text-emerald-300 mb-2" data-key="result_sub">YOUR PACKAGING PLAN</div>
+                                <h2 class="text-3xl sm:text-4xl font-black tracking-tight" data-key="result_title">📦 Here's what we'd recommend</h2>
+                                <p class="text-sm text-emerald-100/70 mt-2" data-key="result_desc">Practical guidance first. Technical details when you need them.</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <button id="new-analysis-btn" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition-all" data-key="new_analysis">New Analysis</button>
+                                <button id="copy-report" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-bold transition-all" data-key="copy_btn">📋 Copy report</button>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                            <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-emerald-200/70 uppercase font-bold" data-key="res_food">Food</div><div id="result-food" class="font-extrabold mt-1">—</div></div>
+                            <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-emerald-200/70 uppercase font-bold" data-key="res_shelf">Shelf life</div><div id="result-shelf" class="font-extrabold mt-1">—</div></div>
+                            <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-emerald-200/70 uppercase font-bold" data-key="res_storage">Storage</div><div id="result-storage" class="font-extrabold mt-1">—</div></div>
+                            <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-emerald-200/70 uppercase font-bold" data-key="res_budget">Budget</div><div id="result-budget" class="font-extrabold mt-1">—</div></div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                            <div class="lg:col-span-2 rounded-3xl bg-white text-slate-900 p-6 sm:p-8 shadow-xl">
+                                <div class="flex items-center gap-3 mb-5">
+                                    <span class="w-11 h-11 rounded-2xl bg-emerald-100 flex items-center justify-center text-2xl">✨</span>
+                                    <div><div class="text-xs font-extrabold uppercase tracking-wider text-emerald-600" data-key="ai_rec">Recommendation</div><h3 class="text-xl font-black" data-key="ai_title">Your AI packaging advice</h3></div>
+                                </div>
+                                <div id="result-content" class="prose prose-slate max-w-none"></div>
+                            </div>
+                            <div class="space-y-5">
+                                <div class="rounded-3xl bg-white/10 border border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">🌱</span><h3 class="font-black text-lg" data-key="eco_title">Eco option</h3></div>
+                                    <p class="text-sm text-emerald-100/80" data-key="eco_desc">Check the sustainable alternative in the recommendation for a lower-impact option.</p>
+                                </div>
+                                <div class="rounded-3xl bg-white/10 border border-white/10 p-6">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">💰</span><h3 class="font-black text-lg" data-key="budget_title">Budget option</h3></div>
+                                    <p class="text-sm text-emerald-100/80" data-key="budget_desc">Your budget is considered so the recommendation stays practical.</p>
+                                </div>
+                                <div class="rounded-3xl bg-amber-300 text-amber-950 p-6">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">⚠️</span><h3 class="font-black text-lg" data-key="warn_title">Before you produce</h3></div>
+                                    <p class="text-sm font-medium" data-key="warn_desc">Use this as a starting point and validate food-contact compliance and final package performance before production.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <details class="mt-5 rounded-3xl bg-white/10 border border-white/10 overflow-hidden">
+                            <summary class="cursor-pointer p-5 font-extrabold flex items-center justify-between">
+                                <span><span data-key="tech_title">🔬 Technical details</span> <span class="text-xs text-emerald-200/70 ml-2">OTR · WVTR · thickness · MAP</span></span>
+                            </summary>
+                            <div id="technical-content" class="px-5 pb-6 text-sm text-emerald-50/90 prose prose-invert max-w-none"></div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- MULTILINGUAL DICTIONARY ---
+        const i18n = {
+            English: {
+                title: "PackSense AI", nav_subtitle: "Smart packaging, made simple",
+                auth_tag: "🌱 Made for real-world food businesses", welcome_back: "Welcome to PackSense AI",
+                auth_sub: "Simple packaging guidance for farmers, food makers & businesses",
+                choose_lang: "🌐 Choose your language", lang_sub: "The questions and AI answer will use this language.",
+                login_tab: "Login", signup_tab: "Sign Up", 
+                username: "Username", username_placeholder: "Enter your username", 
+                password: "Password", submit: "Secure Access",
+                dash_title: "Let's understand your food", dash_sub: "You don't need to be a packaging expert. Just tell us what you're making and how you store it.",
+                tag1: "🌾 Farmer-friendly", tag2: "💰 Budget-aware", tag3: "📦 Practical materials", tag4: "🌱 Eco options",
+                step1_sub: "STEP 1 · THE BASICS", step1_title: "🥭 Tell us about your food", step1_desc: "No technical knowledge needed. Just answer what you know.",
+                food_name: "What food are you packaging?", food_placeholder: "e.g. mangoes, chips, milk, rice",
+                food_type_label: "What kind of food is it?", shelf_life: "How long should it last?",
+                step2_sub: "STEP 2 · REAL-WORLD CONDITIONS", step2_title: "❄️ Where will it live?", step2_desc: "These answers help us understand what your package will have to handle.",
+                storage_type: "Where will it be stored?", transport: "How will it travel?", budget: "What's your budget?", temp_label: "Temperature (if known)",
+                adv_title: "Advanced details", optional: "OPTIONAL", adv_desc: "Only fill these in if you know them",
+                moisture: "Moisture (%)", fat: "Fat (%)", ph: "pH", humidity: "Humidity (% RH)", respiration: "Respiration",
+                extra_notes: "Anything else?", extra_placeholder: "e.g. needs to look premium",
+                ex_25: "e.g. 25", ex_80: "e.g. 80", ex_15: "e.g. 15", ex_4_2: "e.g. 4.2", ex_60: "e.g. 60",
+                quick_title: "Quick start", quick_start: "Try an example", quick_desc: "Not sure what to enter? Pick one and we'll fill it in.",
+                ex_potato: "Potato chips", ex_potato_sub: "Crispy · moisture-sensitive",
+                ex_paper: "Paper-packed snacks", ex_paper_sub: "Dry food · eco-focused",
+                ex_tomato: "Fresh tomatoes", ex_tomato_sub: "Fresh produce · breathable",
+                ex_rice: "Rice", ex_rice_sub: "Dry grain · long shelf life",
+                ex_milk: "Milk", ex_milk_sub: "Dairy · cold storage",
+                history_title: "Recent Searches", history_empty: "No packaging searches yet.",
+                opt_fresh: "Fresh produce", opt_dry: "Dry / low-moisture food", opt_snack: "Snack / fried food", opt_dairy: "Dairy", opt_meat: "Meat / seafood", opt_processed: "Processed / ready-to-eat", opt_other: "Other",
+                opt_3days: "3 days", opt_7days: "7 days", opt_14days: "14 days", opt_30days: "30 days", opt_60days: "60 days", opt_90days: "90+ days",
+                opt_room: "Room temperature", opt_fridge: "Refrigerated", opt_frozen: "Frozen", opt_warehouse: "Warehouse", opt_coldchain: "Cold chain",
+                opt_truck: "Road / Truck", opt_local: "Local delivery", opt_sea: "Sea Freight", opt_air: "Air Freight",
+                opt_budget_low: "Low / Economy", opt_budget_std: "Standard", opt_budget_high: "Premium / Export",
+                opt_resp_none: "Not sure", opt_resp_low: "Low", opt_resp_med: "Medium", opt_resp_high: "High",
+                generate: "✨ Show Me My Packaging Plan", loading: "Cooking up your packaging plan…",
+                result_sub: "YOUR PACKAGING PLAN", result_title: "📦 Here's what we'd recommend", result_desc: "Practical guidance first. Technical details when you need them.",
+                new_analysis: "New Analysis", copy_btn: "📋 Copy report",
+                res_food: "Food", res_shelf: "Shelf life", res_storage: "Storage", res_budget: "Budget",
+                ai_rec: "Recommendation", ai_title: "Your AI packaging advice",
+                eco_title: "Eco option", eco_desc: "Check the sustainable alternative in the recommendation for a lower-impact option.",
+                budget_title: "Budget option", budget_desc: "Your budget is considered so the recommendation stays practical.",
+                warn_title: "Before you produce", warn_desc: "Use this as a starting point and validate food-contact compliance and final package performance before production.",
+                tech_title: "🔬 Technical details"
+            },
+            Hindi: {
+                title: "पैकसेंस एआई", nav_subtitle: "स्मार्ट पैकेजिंग, अब आसान",
+                auth_tag: "🌱 खाद्य व्यवसायों के लिए बनाया गया", welcome_back: "पैकसेंस एआई में आपका स्वागत है",
+                auth_sub: "किसानों और व्यवसायों के लिए सरल पैकेजिंग मार्गदर्शन",
+                choose_lang: "🌐 अपनी भाषा चुनें", lang_sub: "प्रश्न और एआई उत्तर इस भाषा का उपयोग करेंगे।",
+                login_tab: "लॉग इन", signup_tab: "खाता बनाएं", 
+                username: "उपयोगकर्ता नाम", username_placeholder: "अपना उपयोगकर्ता नाम दर्ज करें", 
+                password: "पासवर्ड", submit: "लॉगिन करें",
+                dash_title: "आइए आपके भोजन को समझें", dash_sub: "आपको पैकेजिंग विशेषज्ञ होने की आवश्यकता नहीं है। बस हमें बताएं कि आप क्या बना रहे हैं।",
+                tag1: "🌾 किसान-अनुकूल", tag2: "💰 बजट-अनुकूल", tag3: "📦 व्यावहारिक", tag4: "🌱 ईको विकल्प",
+                step1_sub: "चरण 1 · मूल बातें", step1_title: "🥭 अपने भोजन के बारे में बताएं", step1_desc: "तकनीकी ज्ञान की आवश्यकता नहीं। जो आप जानते हैं बस वही बताएं।",
+                food_name: "आप किस भोजन की पैकेजिंग कर रहे हैं?", food_placeholder: "उदा. आम, चिप्स, दूध, चावल",
+                food_type_label: "यह किस प्रकार का भोजन है?", shelf_life: "यह कितने समय तक चलना चाहिए?",
+                step2_sub: "चरण 2 · वास्तविक दुनिया की स्थितियाँ", step2_title: "❄️ इसे कहाँ रखा जाएगा?", step2_desc: "इन उत्तरों से हमें यह समझने में मदद मिलती है कि आपकी पैकेजिंग को क्या संभालना होगा।",
+                storage_type: "इसे कहाँ संग्रहीत किया जाएगा?", transport: "यह कैसे यात्रा करेगा?", budget: "आपका बजट क्या है?", temp_label: "तापमान (यदि ज्ञात हो)",
+                adv_title: "उन्नत विवरण", optional: "वैकल्पिक", adv_desc: "इन्हें तभी भरें जब आपको पता हो",
+                moisture: "नमी (%)", fat: "वसा (%)", ph: "पीएच (pH)", humidity: "आर्द्रता (% RH)", respiration: "श्वसन (Respiration)",
+                extra_notes: "कुछ और?", extra_placeholder: "उदा. प्रीमियम दिखना चाहिए",
+                ex_25: "उदा. 25", ex_80: "उदा. 80", ex_15: "उदा. 15", ex_4_2: "उदा. 4.2", ex_60: "उदा. 60",
+                quick_title: "त्वरित शुरुआत", quick_start: "एक उदाहरण आज़माएं", quick_desc: "क्या दर्ज करें समझ नहीं आ रहा? एक चुनें।",
+                ex_potato: "आलू के चिप्स", ex_potato_sub: "कुरकुरे · नमी संवेदनशील",
+                ex_paper: "कागज में पैक स्नैक्स", ex_paper_sub: "सूखा भोजन · ईको-फोकस्ड",
+                ex_tomato: "ताज़े टमाटर", ex_tomato_sub: "ताजा उत्पाद · सांस लेने योग्य",
+                ex_rice: "चावल", ex_rice_sub: "सूखा अनाज · लंबी शेल्फ लाइफ",
+                ex_milk: "दूध", ex_milk_sub: "डेयरी · कोल्ड स्टोरेज",
+                history_title: "हाल की खोजें", history_empty: "अभी तक कोई पैकेजिंग खोज नहीं।",
+                opt_fresh: "ताजा उत्पाद", opt_dry: "सूखा भोजन", opt_snack: "स्नैक / तला हुआ", opt_dairy: "डेयरी", opt_meat: "मांस / समुद्री भोजन", opt_processed: "संसाधित (Processed)", opt_other: "अन्य",
+                opt_3days: "3 दिन", opt_7days: "7 दिन", opt_14days: "14 दिन", opt_30days: "30 दिन", opt_60days: "60 दिन", opt_90days: "90+ दिन",
+                opt_room: "कमरे का तापमान", opt_fridge: "फ्रिज में", opt_frozen: "जमा हुआ (Frozen)", opt_warehouse: "गोदाम", opt_coldchain: "कोल्ड चेन",
+                opt_truck: "सड़क / ट्रक", opt_local: "स्थानीय वितरण", opt_sea: "समुद्री माल ढुलाई", opt_air: "हवाई माल ढुलाई",
+                opt_budget_low: "कम / इकॉनमी", opt_budget_std: "मानक", opt_budget_high: "प्रीमियम / निर्यात",
+                opt_resp_none: "पता नहीं", opt_resp_low: "कम", opt_resp_med: "मध्यम", opt_resp_high: "उच्च",
+                generate: "✨ मेरी पैकेजिंग योजना दिखाएं", loading: "आपकी पैकेजिंग योजना तैयार की जा रही है…",
+                result_sub: "आपकी पैकेजिंग योजना", result_title: "📦 यहाँ हमारी सिफारिशें हैं", result_desc: "पहले व्यावहारिक मार्गदर्शन। जरूरत पड़ने पर तकनीकी विवरण।",
+                new_analysis: "नया विश्लेषण", copy_btn: "📋 रिपोर्ट कॉपी करें",
+                res_food: "भोजन", res_shelf: "शेल्फ लाइफ", res_storage: "भंडारण", res_budget: "बजट",
+                ai_rec: "सिफारिश", ai_title: "आपकी एआई पैकेजिंग सलाह",
+                eco_title: "ईको विकल्प", eco_desc: "कम प्रभाव वाले विकल्प के लिए सिफारिश में टिकाऊ विकल्प की जाँच करें।",
+                budget_title: "बजट विकल्प", budget_desc: "आपके बजट पर विचार किया गया है ताकि सिफारिश व्यावहारिक रहे।",
+                warn_title: "उत्पादन से पहले", warn_desc: "इसे एक प्रारंभिक बिंदु के रूप में उपयोग करें और उत्पादन से पहले परीक्षण करें।",
+                tech_title: "🔬 तकनीकी विवरण"
+            },
+            Marathi: {
+                title: "पॅकसेंस एआय", nav_subtitle: "स्मार्ट पॅकेजिंग, आता सोपे",
+                auth_tag: "🌱 खाद्य व्यवसायांसाठी बनवलेले", welcome_back: "पॅकसेंस एआय मध्ये आपले स्वागत आहे",
+                auth_sub: "शेतकरी आणि व्यवसायांसाठी सोपे पॅकेजिंग मार्गदर्शन",
+                choose_lang: "🌐 तुमची भाषा निवडा", lang_sub: "प्रश्न आणि एआय उत्तरे या भाषेचा वापर करतील.",
+                login_tab: "लॉगिन", signup_tab: "खाते तयार करा", 
+                username: "वापरकर्तानाव", username_placeholder: "तुमचे वापरकर्तानाव प्रविष्ट करा", 
+                password: "पासवर्ड", submit: "लॉगिन करा",
+                dash_title: "चला तुमचे अन्न समजून घेऊया", dash_sub: "तुम्हाला पॅकेजिंग तज्ञ असण्याची गरज नाही. तुम्ही काय बनवत आहात ते फक्त आम्हाला सांगा.",
+                tag1: "🌾 शेतकरी-अनुकूल", tag2: "💰 बजेट-अनुकूल", tag3: "📦 व्यावहारिक", tag4: "🌱 इको पर्याय",
+                step1_sub: "पायरी 1 · मूलभूत माहिती", step1_title: "🥭 तुमच्या अन्नाबद्दल सांगा", step1_desc: "तांत्रिक ज्ञानाची गरज नाही. जे तुम्हाला माहीत आहे ते सांगा.",
+                food_name: "तुम्ही कोणत्या अन्नाचे पॅकेजिंग करत आहात?", food_placeholder: "उदा. आंबे, चिप्स, दूध, तांदूळ",
+                food_type_label: "हे कोणत्या प्रकारचे अन्न आहे?", shelf_life: "ते किती काळ टिकले पाहिजे?",
+                step2_sub: "पायरी 2 · वास्तविक जगाची परिस्थिती", step2_title: "❄️ ते कुठे ठेवले जाईल?", step2_desc: "या उत्तरांमुळे आम्हाला समजण्यास मदत होते की पॅकेजिंगला काय हाताळावे लागेल.",
+                storage_type: "ते कुठे साठवले जाईल?", transport: "ते कसे प्रवास करेल?", budget: "तुमचे बजेट काय आहे?", temp_label: "तापमान (माहित असल्यास)",
+                adv_title: "प्रगत तपशील", optional: "पर्यायी", adv_desc: "माहित असल्यास फक्त हे भरा",
+                moisture: "आर्द्रता (%)", fat: "चरबी (%)", ph: "पीएच (pH)", humidity: "आर्द्रता (% RH)", respiration: "श्वसन (Respiration)",
+                extra_notes: "अजून काही?", extra_placeholder: "उदा. प्रीमियम दिसले पाहिजे",
+                ex_25: "उदा. 25", ex_80: "उदा. 80", ex_15: "उदा. 15", ex_4_2: "उदा. 4.2", ex_60: "उदा. 60",
+                quick_title: "त्वरित सुरुवात", quick_start: "एक उदाहरण वापरून पहा", quick_desc: "काय प्रविष्ट करावे माहित नाही? एक निवडा.",
+                ex_potato: "बटाटा चिप्स", ex_potato_sub: "कुरकुरीत · ओलावा संवेदनशील",
+                ex_paper: "कागदात पॅक केलेले स्नॅक्स", ex_paper_sub: "सुके अन्न · इको-फोकस्ड",
+                ex_tomato: "ताजे टोमॅटो", ex_tomato_sub: "ताजे उत्पादन · श्वास घेण्यायोग्य",
+                ex_rice: "तांदूळ", ex_rice_sub: "सुके धान्य · दीर्घ शेल्फ लाइफ",
+                ex_milk: "दूध", ex_milk_sub: "डेअरी · कोल्ड स्टोरेज",
+                history_title: "अलीकडील शोध", history_empty: "अद्याप कोणतेही पॅकेजिंग शोध नाहीत.",
+                opt_fresh: "ताजे उत्पादन", opt_dry: "सुके अन्न", opt_snack: "स्नॅक / तळलेले", opt_dairy: "डेअरी", opt_meat: "मांस / सीफूड", opt_processed: "प्रक्रिया केलेले (Processed)", opt_other: "इतर",
+                opt_3days: "3 दिवस", opt_7days: "7 दिवस", opt_14days: "14 दिवस", opt_30days: "30 दिवस", opt_60days: "60 दिवस", opt_90days: "90+ दिवस",
+                opt_room: "खोलीचे तापमान", opt_fridge: "फ्रीजमध्ये", opt_frozen: "गोठवलेले (Frozen)", opt_warehouse: "गोदाम", opt_coldchain: "कोल्ड चेन",
+                opt_truck: "रस्ता / ट्रक", opt_local: "स्थानिक वितरण", opt_sea: "समुद्री मालवाहतूक", opt_air: "हवाई मालवाहतूक",
+                opt_budget_low: "कमी / इकॉनॉमी", opt_budget_std: "मानक", opt_budget_high: "प्रीमियम / निर्यात",
+                opt_resp_none: "माहित नाही", opt_resp_low: "कमी", opt_resp_med: "मध्यम", opt_resp_high: "उच्च",
+                generate: "✨ माझी पॅकेजिंग योजना दाखवा", loading: "तुमची पॅकेजिंग योजना तयार होत आहे…",
+                result_sub: "तुमची पॅकेजिंग योजना", result_title: "📦 ही आमची शिफारस आहे", result_desc: "प्रथम व्यावहारिक मार्गदर्शन. गरज पडल्यास तांत्रिक तपशील.",
+                new_analysis: "नवीन विश्लेषण", copy_btn: "📋 अहवाल कॉपी करा",
+                res_food: "अन्न", res_shelf: "शेल्फ लाइफ", res_storage: "साठवणूक", res_budget: "बजेट",
+                ai_rec: "शिफारस", ai_title: "तुमचा एआय पॅकेजिंग सल्ला",
+                eco_title: "इको पर्याय", eco_desc: "कमी परिणामाच्या पर्यायासाठी शिफारसीतील शाश्वत पर्याय तपासा.",
+                budget_title: "बजेट पर्याय", budget_desc: "तुमच्या बजेटचा विचार केला गेला आहे जेणेकरून शिफारस व्यावहारिक राहील.",
+                warn_title: "उत्पादनापूर्वी", warn_desc: "हा सुरुवातीचा बिंदू म्हणून वापरा आणि उत्पादनापूर्वी चाचणी करा.",
+                tech_title: "🔬 तांत्रिक तपशील"
+            }
+        };
+
+        const html = document.documentElement;
+        const themeBtn = document.getElementById('theme-toggle');
+        const iconSun = document.getElementById('icon-sun');
+        const iconMoon = document.getElementById('icon-moon');
+        
+        themeBtn.onclick = () => {
+            html.classList.toggle('dark');
+            if(html.classList.contains('dark')) {
+                iconSun.classList.add('hidden'); iconMoon.classList.remove('hidden');
+            } else {
+                iconMoon.classList.add('hidden'); iconSun.classList.remove('hidden');
+            }
+        };
+
+        function applyLanguage(lang, isUserAction = false) {
+            const dictionary = i18n[lang] || i18n.English;
+
+            document.querySelectorAll("[data-key]").forEach(el => {
+                const key = el.dataset.key;
+                if (!dictionary[key]) return;
+
+                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+                    el.placeholder = dictionary[key];
+                } else if (el.tagName === "OPTION") {
+                    el.textContent = dictionary[key];
+                } else {
+                    el.innerHTML = dictionary[key];
+                }
+            });
+
+            document.querySelectorAll("[data-placeholder-key]").forEach(el => {
+                const key = el.dataset.placeholderKey;
+                if (dictionary[key]) {
+                    el.placeholder = dictionary[key];
+                }
+            });
+
+            const homeSelect = document.getElementById("lang-select-home");
+            const resultSelect = document.getElementById("lang-select");
+
+            if (homeSelect) homeSelect.value = lang;
+            if (resultSelect) resultSelect.value = lang;
+
+            localStorage.setItem("packsense-language", lang);
+            
+            // Re-run meta population so the Result Cards translate instantly
+            populateResultMeta(); 
+
+            // Feature: Auto-regenerate AI Response if the user changes language while viewing the result!
+            if (isUserAction) {
+                const resultSection = document.getElementById('result-section');
+                if (resultSection && !resultSection.classList.contains('hidden')) {
+                    document.getElementById('btn-generate').click();
+                }
+            }
+        }
+
+        document.getElementById('lang-select').onchange = (e) => applyLanguage(e.target.value, true);
+        document.getElementById('lang-select-home').onchange = (e) => applyLanguage(e.target.value, true);
+        
+        const savedLanguage = localStorage.getItem('packsense-language') || 'English';
+        applyLanguage(savedLanguage, false);
+
+        // Advanced Toggle
+        const advancedToggle = document.getElementById('advanced-toggle');
+        const advancedDetails = document.getElementById('advanced-details');
+        const advancedChevron = document.getElementById('advanced-chevron');
+
+        advancedToggle.onclick = () => {
+            advancedDetails.classList.toggle('hidden');
+            advancedChevron.classList.toggle('rotate-180');
+        };
+
+        // --- AUTH LOGIC ---
+        let isLogin = true;
+        const btnLogin = document.getElementById('btn-show-login');
+        const btnSignup = document.getElementById('btn-show-signup');
+
+        btnLogin.onclick = () => { 
+            isLogin = true; 
+            btnLogin.className = "flex-1 py-2 text-sm font-bold rounded-lg bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-white transition-all";
+            btnSignup.className = "flex-1 py-2 text-sm font-bold rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all";
+        };
+        btnSignup.onclick = () => { 
+            isLogin = false; 
+            btnSignup.className = "flex-1 py-2 text-sm font-bold rounded-lg bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-white transition-all";
+            btnLogin.className = "flex-1 py-2 text-sm font-bold rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all";
+        };
+
+        document.getElementById('btn-submit-auth').onclick = async () => {
+            const user = document.getElementById('auth-user').value;
+            const pass = document.getElementById('auth-pass').value;
+            const msg = document.getElementById('auth-msg');
+            
+            if(!user || !pass) { msg.innerText = "Please fill all fields."; msg.className="text-center text-sm font-bold mt-4 h-4 text-red-500"; return; }
+
+            const res = await fetch(isLogin ? '/api/login' : '/api/signup', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+            const data = await res.json();
+
+            if(res.ok) {
+                if(isLogin) {
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('nav-auth-controls').classList.remove('hidden');
+                    document.getElementById('nav-auth-controls').classList.add('flex');
+                    document.getElementById('welcome-msg').innerText = `Hi, ${data.username}`;
+                    
+                    const appSec = document.getElementById('app-section');
+                    appSec.classList.remove('hidden');
+                    appSec.parentElement.classList.remove('opacity-0', 'animate-fade-in-up');
+                    void appSec.parentElement.offsetWidth; 
+                    appSec.parentElement.classList.add('animate-fade-in-up');
+                } else {
+                    msg.className = "text-center text-sm font-bold mt-4 h-4 text-brand-500";
+                    msg.innerText = "Account created! You can now log in.";
+                    btnLogin.click();
+                }
+            } else {
+                msg.className = "text-center text-sm font-bold mt-4 h-4 text-red-500";
+                msg.innerText = data.message || "Authentication failed.";
+            }
+        };
+
+        document.getElementById('btn-logout').onclick = async () => {
+            await fetch('/api/logout', { method: 'POST' });
+            location.reload(); 
+        };
+
+        // --- PARSING UTILS ---
+        function cleanAIText(text) {
+            return text
+                .replace(/\\\\(mathbf|mathrm|mathit|text|operatorname)\\{([^{}]*)\\}/g, "$2")
+                .replace(/\\\\(approx|sim|times|pm|leq|geq|degree)/g, (m, cmd) => ({
+                    approx: "≈", sim: "∼", times: "×", pm: "±", leq: "≤", geq: "≥", degree: "°"
+                }[cmd] || ""))
+                .replace(/\\\\%/g, "%")
+                .replace(/\\\\_/g, "_")
+                .replace(/\\\\\\^/g, "^")
+                .replace(/\\\\_/g, "")
+                .replace(/\\\\/g, "")
+                .replace(/\$/g, "");
+        }
+
+        let lastRecommendation = "";
+
+        function extractTechnicalSection(text) {
+            const lower = text.toLowerCase();
+            const markers = ["technical details", "technical specs", "technical specification", "तकनीकी विवरण", "तांत्रिक तपशील"];
+            let best = -1;
+            for (const marker of markers) {
+                const found = lower.indexOf(marker);
+                if (found !== -1 && (best === -1 || found < best)) best = found;
+            }
+            if (best === -1) return { main: text, technical: "" };
+            const splitAt = text.lastIndexOf("\n", best);
+            return { main: text.slice(0, splitAt > 0 ? splitAt : best), technical: text.slice(splitAt > 0 ? splitAt : best) };
+        }
+
+        function populateResultMeta() {
+            document.getElementById("result-food").innerText = document.getElementById("commodity").value || "—";
+            const shelfEl = document.getElementById("shelf_life");
+            document.getElementById("result-shelf").innerText = shelfEl.options[shelfEl.selectedIndex]?.text || "—";
+            const storageEl = document.getElementById("storage_type");
+            document.getElementById("result-storage").innerText = storageEl.options[storageEl.selectedIndex]?.text || "—";
+            const budgetEl = document.getElementById("budget");
+            document.getElementById("result-budget").innerText = budgetEl.options[budgetEl.selectedIndex]?.text || "—";
+        }
+
+        // --- HISTORY ---
+        async function loadSearchHistory() {
+            const historyPanel = document.getElementById("history-list");
+            if (!historyPanel) return;
+
+            try {
+                const response = await fetch("/api/history");
+                if (!response.ok) return;
+                const items = await response.json();
+
+                if (!items.length) {
+                    const lang = document.getElementById('lang-select').value;
+                    const emptyMsg = i18n[lang]?.history_empty || i18n.English.history_empty;
+                    historyPanel.innerHTML = `<div class="text-sm text-slate-500">${emptyMsg}</div>`;
+                    return;
+                }
+
+                historyPanel.innerHTML = items.map((item, index) => `
+                    <button type="button" class="history-item w-full text-left p-3 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition border border-transparent hover:border-brand-200 dark:hover:border-brand-800" data-history-index="${index}">
+                        <div class="font-bold text-sm">${escapeHtml(item.commodity || "Packaging analysis")}</div>
+                        <div class="text-xs text-slate-500 mt-1">${escapeHtml(item.timestamp || "")}</div>
+                    </button>
+                `).join("");
+
+                historyPanel.querySelectorAll(".history-item").forEach((button) => {
+                    button.onclick = () => {
+                        const item = items[Number(button.dataset.historyIndex)];
+                        if (!item) return;
+
+                        const sidePresets = document.getElementById('side-presets');
+                        const mainInput = document.getElementById('main-input-area');
+                        if(sidePresets && mainInput) {
+                            sidePresets.classList.add('hidden');
+                            mainInput.classList.remove('lg:col-span-2');
+                            mainInput.classList.add('lg:col-span-3');
+                        }
+
+                        document.getElementById("input-stage")?.classList.add("hidden");
+                        document.getElementById("result-section")?.classList.remove("hidden");
+
+                        lastRecommendation = cleanAIText(item.recommendation || "");
+                        const split = extractTechnicalSection(lastRecommendation);
+                        document.getElementById("result-content").innerHTML = marked.parse(split.main);
+                        document.getElementById("technical-content").innerHTML = marked.parse(split.technical || "No separate technical details were provided.");
+
+                        const food = document.getElementById("result-food");
+                        if (food) food.innerText = item.commodity || "—";
+                        window.scrollTo({top: 0, behavior: "smooth"});
+                    };
+                });
+            } catch (e) {
+                console.error("Could not load history:", e);
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
+            }[char]));
+        }
+
+        document.getElementById("copy-report").onclick = async () => {
+            if (!lastRecommendation) return;
+            try {
+                await navigator.clipboard.writeText(lastRecommendation);
+                const btn = document.getElementById("copy-report");
+                
+                const lang = document.getElementById('lang-select').value;
+                btn.innerText = lang === 'Hindi' ? '✓ कॉपी किया गया!' : (lang === 'Marathi' ? '✓ कॉपी केले!' : '✓ Copied!');
+                
+                setTimeout(() => {
+                    btn.innerText = i18n[lang]?.copy_btn || i18n.English.copy_btn;
+                }, 1600);
+            } catch(e) {
+                alert("Could not copy automatically.");
+            }
+        };
+
+        // --- PRESETS ---
+        const quickPresets = {
+            potato: {commodityKey:"ex_potato", food_type:"Snack / fried food", shelf_life:"60", storage_type:"Room temperature", transport:"Road / Truck", budget:"Standard", temp:"25", moisture:"2", fat:"30", ph:"", humidity:"60", respiration:"Low"},
+            paper: {commodityKey:"ex_paper", food_type:"Dry / low-moisture food", shelf_life:"30", storage_type:"Room temperature", transport:"Local delivery", budget:"Low / Economy", temp:"25", moisture:"5", fat:"10", ph:"", humidity:"60", respiration:"Low"},
+            tomato: {commodityKey:"ex_tomato", food_type:"Fresh produce", shelf_life:"7", storage_type:"Room temperature", transport:"Road / Truck", budget:"Standard", temp:"25", moisture:"94", fat:"", ph:"4.3", humidity:"85", respiration:"High"},
+            rice: {commodityKey:"ex_rice", food_type:"Dry / low-moisture food", shelf_life:"90", storage_type:"Warehouse", transport:"Road / Truck", budget:"Low / Economy", temp:"25", moisture:"12", fat:"1", ph:"", humidity:"60", respiration:"Low"},
+            milk: {commodityKey:"ex_milk", food_type:"Dairy", shelf_life:"7", storage_type:"Refrigerated", transport:"Cold chain", budget:"Standard", temp:"4", moisture:"87", fat:"3.5", ph:"6.7", humidity:"80", respiration:"Low"}
+        };
+        document.querySelectorAll(".quick-preset").forEach(button => {
+            button.onclick = () => {
+                const preset = quickPresets[button.dataset.preset];
+                const lang = document.getElementById('lang-select').value;
+                
+                Object.entries(preset).forEach(([id, value]) => {
+                    const el = document.getElementById(id === "commodityKey" ? "commodity" : id);
+                    if (el) {
+                        el.value = id === "commodityKey" ? (i18n[lang][value] || value) : value;
+                    }
+                });
+                
+                document.getElementById("advanced-details").classList.remove("hidden");
+                document.getElementById("advanced-chevron").classList.add("rotate-180");
+                document.querySelectorAll(".quick-preset").forEach(b=>b.classList.remove("ring-2","ring-brand-400","bg-brand-50","dark:bg-brand-950/30"));
+                button.classList.add("ring-2","ring-brand-400","bg-brand-50","dark:bg-brand-950/30");
+                document.getElementById("commodity").scrollIntoView({behavior:"smooth",block:"center"});
+            };
+        });
+
+        // --- GENERATE LOGIC ---
+        document.getElementById('btn-generate').onclick = async () => {
+            const payload = {
+                language: document.getElementById('lang-select').value,
+                commodity: document.getElementById('commodity').value,
+                food_type: document.getElementById('food_type').value,
+                moisture: document.getElementById('moisture').value || "Not provided",
+                fat: document.getElementById('fat').value || "Not provided",
+                ph: document.getElementById('ph').value || "Not provided",
+                storage_type: document.getElementById('storage_type').value,
+                temp: document.getElementById('temp').value || "Not provided",
+                humidity: document.getElementById('humidity').value || "Not provided",
+                shelf_life: document.getElementById('shelf_life').value,
+                respiration: document.getElementById('respiration').value,
+                transport: document.getElementById('transport').value,
+                budget: document.getElementById('budget').value,
+                extra_notes: document.getElementById('extra_notes').value || "None"
+            };
+
+            const lang = document.getElementById('lang-select').value;
+            if(!payload.commodity) {
+                return alert(lang === "Hindi" ? "कृपया भोजन का नाम दर्ज करें।" : (lang === "Marathi" ? "कृपया अन्नाचे नाव प्रविष्ट करा." : "Please specify the food you are packaging."));
+            }
+
+            document.getElementById('loading-msg').classList.remove('hidden');
+            document.getElementById('btn-generate').classList.add('hidden');
+            document.getElementById('result-section').classList.add('hidden');
+
+            const res = await fetch('/api/generate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            document.getElementById('loading-msg').classList.add('hidden');
+            document.getElementById('btn-generate').classList.remove('hidden');
+
+            if(res.ok) {
+                const sidePresets = document.getElementById('side-presets');
+                const mainInput = document.getElementById('main-input-area');
+                if(sidePresets && mainInput) {
+                    sidePresets.classList.add('hidden');
+                    mainInput.classList.remove('lg:col-span-2');
+                    mainInput.classList.add('lg:col-span-3');
+                }
+                
+                document.getElementById('input-stage').classList.add('hidden');
+
+                const resultBox = document.getElementById('result-section');
+                resultBox.classList.remove('hidden');
+                
+                lastRecommendation = cleanAIText(data.recommendation);
+                const split = extractTechnicalSection(lastRecommendation);
+                document.getElementById("result-content").innerHTML = marked.parse(split.main);
+                document.getElementById("technical-content").innerHTML = marked.parse(split.technical || "No separate technical details were provided.");
+                
+                populateResultMeta();
+                loadSearchHistory();
+                
+                resultBox.classList.remove('animate-fade-in-up');
+                void resultBox.offsetWidth;
+                resultBox.classList.add('animate-fade-in-up');
+                
+                setTimeout(() => window.scrollTo({top: 0, behavior: "smooth"}), 100);
+            } else {
+                alert(lang === "Hindi" ? "कुछ गलत हो गया। कृपया पुनः प्रयास करें।" : (lang === "Marathi" ? "काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा." : "We could not generate the recommendation right now. Please try again."));
+            }
+        };
+        
+        document.getElementById("new-analysis-btn")?.addEventListener("click", () => {
+            const sidePresets = document.getElementById('side-presets');
+            const mainInput = document.getElementById('main-input-area');
+            if(sidePresets && mainInput) {
+                sidePresets.classList.remove('hidden');
+                mainInput.classList.remove('lg:col-span-3');
+                mainInput.classList.add('lg:col-span-2');
+            }
+            
+            document.getElementById("result-section")?.classList.add("hidden");
+            document.getElementById("input-stage")?.classList.remove("hidden");
+            
+            // Un-hide the generate button just in case we hit "New Analysis" while generating
+            document.getElementById('btn-generate').classList.remove('hidden');
+            window.scrollTo({top: 0, behavior: "smooth"});
+        });
+
+        window.addEventListener("load", loadSearchHistory);
+    </script>
+</body>
+</html>
