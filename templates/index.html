@@ -28,6 +28,7 @@
         }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body {
             background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1920');
@@ -59,6 +60,7 @@
             background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; color: #f8fafc;
         }
         .input-premium:focus { border-color: #10b981; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15); }
+        .input-premium.input-invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15) !important; }
 
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -91,10 +93,49 @@
         .md-prose strong { color: #0f172a; }
         .dark .md-prose strong { color: #f8fafc; }
         .md-prose p { line-height: 1.7; margin-bottom: 1.5rem; }
+
+        @keyframes pulse-skeleton { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .skeleton-block { animation: pulse-skeleton 1.5s ease-in-out infinite; background: rgba(255,255,255,0.15); border-radius: 0.75rem; }
+        .dark .skeleton-block { background: rgba(255,255,255,0.08); }
+        html:not(.dark) .skeleton-block { background: rgba(15,23,42,0.08); }
+
+        body.compact-mode .side-card-padded { padding: 1rem !important; }
+        body.compact-mode .side-card-text { font-size: 0.75rem !important; }
+        body.compact-mode #result-section .prose { font-size: 0.9rem; }
+
+        /* --- Result mini-nav --- */
+        /* Sticks just below the main site nav (~4.5rem tall) instead of at
+           the very top of the viewport, so the two bars don't overlap. */
+        #result-mini-nav { position: sticky; top: 4.5rem; z-index: 30; }
+        #result-mini-nav .glass { background: rgba(15, 23, 42, 0.92) !important; backdrop-filter: blur(16px); }
+        html:not(.dark) #result-mini-nav .glass { background: rgba(255, 255, 255, 0.95) !important; }
+        #result-mini-nav a { white-space: nowrap; }
+        #result-mini-nav a.active { background: rgba(255,255,255,0.25) !important; color: white !important; }
+
+        /* --- Skeleton loading state --- */
+        #skeleton-section .skel-line { height: 0.85rem; border-radius: 0.4rem; }
+
+        @media print {
+            nav, #input-stage, #side-presets, #new-analysis-btn, #copy-report, #download-qr, #download-pdf, #download-qr, .quick-preset, #result-mini-nav, #compare-result, #offline-banner, #confidence-badge, #generate-error { display: none !important; }
+            body { background: white !important; }
+            .theme-overlay { display: none !important; }
+            #result-section, #result-section * { visibility: visible; }
+            .glass { box-shadow: none !important; backdrop-filter: none !important; }
+            #result-section .grid.lg\:grid-cols-3 { display: block !important; }
+            #result-section .rounded-\[2rem\] { border-radius: 0 !important; }
+            #result-section * { color: #0f172a !important; background: white !important; box-shadow: none !important; }
+            #result-section .prose { max-width: 100% !important; }
+            #result-section section, #result-section > div { page-break-inside: avoid; }
+            #pitch-mode-only { display: block !important; }
+            #result-section .lg\:col-span-2, #result-section .space-y-5 { page-break-inside: avoid; }
+        }
     </style>
 </head>
 <body class="text-slate-800 dark:text-slate-100 antialiased transition-colors duration-500">
     <div class="theme-overlay"></div>
+
+    <!-- Toast notifications (replaces alert() popups) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 items-end pointer-events-none"></div>
 
     <nav class="glass sticky top-0 z-50 px-6 py-4 border-b">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
@@ -112,7 +153,9 @@
                     <option value="Hindi">🇮🇳 Hindi</option>
                     <option value="Marathi">🚩 Marathi</option>
                 </select>
-                
+
+                <button id="compact-toggle" class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" title="Toggle compact mode">🗜️</button>
+
                 <button id="theme-toggle" class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all">
                     <svg id="icon-sun" class="w-5 h-5 hidden text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 2.32a1 1 0 011.415 0l.708.707a1 1 0 01-1.414 1.415l-.708-.707a1 1 0 010-1.415zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4.22-2.32a1 1 0 01-1.415 0l-.708-.707a1 1 0 011.414-1.415l.708.707a1 1 0 010 1.415zM3 9a1 1 0 100 2H2a1 1 0 100-2h1zM5.78 4.32a1 1 0 010 1.415l-.707.707a1 1 0 01-1.415-1.414l.707-.707a1 1 0 011.415 0zM10 5a5 5 0 100 10 5 5 0 000-10z"/></svg>
                     <svg id="icon-moon" class="w-5 h-5 text-brand-500" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
@@ -216,6 +259,14 @@
                                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="food_name">What food are you packaging?</label>
                                             <input id="commodity" class="input-premium" placeholder="e.g. mangoes, chips, milk, rice" data-placeholder-key="food_placeholder">
                                         </div>
+                                        <div class="md:col-span-2 flex items-center gap-2">
+                                            <input type="checkbox" id="compare-toggle" class="w-4 h-4 rounded accent-brand-500">
+                                            <label for="compare-toggle" class="text-sm font-bold text-slate-600 dark:text-slate-300 cursor-pointer" data-key="compare_toggle">Compare with a second food</label>
+                                        </div>
+                                        <div id="compare-food-wrap" class="md:col-span-2 hidden">
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="compare_food_label">Second food to compare</label>
+                                            <input id="commodity-b" class="input-premium" placeholder="e.g. banana chips" data-placeholder-key="compare_food_placeholder">
+                                        </div>
                                         <div>
                                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="food_type_label">What kind of food is it?</label>
                                             <select id="food_type" class="input-premium">
@@ -277,7 +328,13 @@
                                         </div>
                                         <div>
                                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="temp_label">Temperature (if known)</label>
-                                            <input id="temp" class="input-premium" type="number" value="25" placeholder="e.g. 25" data-placeholder-key="ex_25">
+                                            <input id="temp" class="input-premium" type="number" value="25" min="-30" max="60" placeholder="e.g. 25" data-placeholder-key="ex_25">
+                                            <p id="temp-hint" class="hidden text-[11px] font-semibold text-red-500 mt-1"></p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="humidity">Humidity (% RH)</label>
+                                            <input id="humidity" class="input-premium" type="number" value="60" min="0" max="100" placeholder="e.g. 60" data-placeholder-key="ex_60">
+                                            <p id="humidity-hint" class="hidden text-[11px] font-semibold text-red-500 mt-1"></p>
                                         </div>
                                     </div>
                                 </div>
@@ -298,19 +355,15 @@
                                         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <div>
                                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="moisture">Moisture (%)</label>
-                                                <input id="moisture" class="input-premium" type="number" placeholder="e.g. 80" data-placeholder-key="ex_80">
+                                                <input id="moisture" class="input-premium" type="number" min="0" max="100" placeholder="e.g. 80" data-placeholder-key="ex_80">
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="fat">Fat (%)</label>
-                                                <input id="fat" class="input-premium" type="number" placeholder="e.g. 15" data-placeholder-key="ex_15">
+                                                <input id="fat" class="input-premium" type="number" min="0" max="100" placeholder="e.g. 15" data-placeholder-key="ex_15">
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="ph">pH</label>
-                                                <input id="ph" class="input-premium" type="number" step="0.1" placeholder="e.g. 4.2" data-placeholder-key="ex_4_2">
-                                            </div>
-                                            <div>
-                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="humidity">Humidity (% RH)</label>
-                                                <input id="humidity" class="input-premium" type="number" value="60" placeholder="e.g. 60" data-placeholder-key="ex_60">
+                                                <input id="ph" class="input-premium" type="number" step="0.1" min="0" max="14" placeholder="e.g. 4.2" data-placeholder-key="ex_4_2">
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="respiration">Respiration</label>
@@ -323,7 +376,12 @@
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="extra_notes">Anything else?</label>
-                                                <input id="extra_notes" class="input-premium" placeholder="e.g. needs to look premium" data-placeholder-key="extra_placeholder">
+                                                <input id="extra_notes" maxlength="300" class="input-premium" placeholder="e.g. needs to look premium" data-placeholder-key="extra_placeholder">
+                                                <p id="extra-notes-count" class="text-[11px] text-slate-400 mt-1 text-right">0 / 300</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="value_per_unit">Selling price per unit (₹, optional)</label>
+                                                <input id="value_per_unit" class="input-premium" type="number" placeholder="e.g. 20" data-placeholder-key="ex_value">
                                             </div>
                                         </div>
                                     </div>
@@ -360,7 +418,14 @@
                             </div>
                             
                             <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                                <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-500 mb-3" data-key="expiring_title">Expiring Soon</h3>
+                                <div id="expiring-list" class="space-y-2">
+                                </div>
+                            </div>
+
+                            <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
                                 <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-500 mb-3" data-key="history_title">Recent Searches</h3>
+                                <input id="history-search" type="text" class="input-premium !py-2 !text-xs mb-3" data-placeholder-key="history_search_placeholder" placeholder="Search past searches...">
                                 <div id="history-list" class="space-y-2">
                                 </div>
                             </div>
@@ -368,24 +433,96 @@
                     </div>
 
                     <div class="mt-12">
-                        <button id="btn-generate" class="w-full py-5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 dark:from-brand-600 dark:to-brand-500 text-white font-extrabold text-xl shadow-2xl hover:shadow-brand-500/25 transition-all transform hover:-translate-y-1 flex justify-center items-center gap-3">
+                        <div id="validation-summary" class="hidden mb-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 p-3 text-sm font-bold text-amber-700 dark:text-amber-300 text-center"></div>
+                        <button id="btn-generate" class="w-full py-5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 dark:from-brand-600 dark:to-brand-500 text-white font-extrabold text-xl shadow-2xl hover:shadow-brand-500/25 transition-all transform hover:-translate-y-1 flex justify-center items-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                             <svg class="w-6 h-6 text-brand-400 dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
                             <span data-key="generate">✨ Show Me My Packaging Plan</span>
                         </button>
-                        
-                        <div id="loading-msg" class="hidden flex flex-col items-center justify-center mt-10">
-                            <div class="relative w-12 h-12 mb-4">
-                                <div class="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-700"></div>
-                                <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
+                        <p class="text-center text-[11px] text-slate-400 mt-2" id="kbd-shortcut-hint" data-key="kbd_hint">Tip: press Ctrl+Enter (⌘+Enter on Mac) to generate</p>
+
+                        <!-- Skeleton loading state (replaces plain spinner) -->
+                        <div id="skeleton-section" class="hidden mt-10">
+                            <div class="flex flex-col items-center justify-center mb-6">
+                                <div class="relative w-10 h-10 mb-3">
+                                    <div class="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-700"></div>
+                                    <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
+                                </div>
+                                <p id="loading-msg-text" class="text-brand-600 dark:text-brand-400 font-bold tracking-wide animate-pulse" data-key="loading">Cooking up your packaging plan…</p>
                             </div>
-                            <p class="text-brand-600 dark:text-brand-400 font-bold tracking-wide animate-pulse" data-key="loading">Cooking up your packaging plan…</p>
+                            <div class="rounded-[2rem] bg-emerald-950/80 p-6 sm:p-9">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                                    <div class="skeleton-block h-20"></div>
+                                    <div class="skeleton-block h-20"></div>
+                                    <div class="skeleton-block h-20"></div>
+                                    <div class="skeleton-block h-20"></div>
+                                </div>
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                                    <div class="lg:col-span-2 space-y-3">
+                                        <div class="skeleton-block h-8 w-2/3"></div>
+                                        <div class="skeleton-block skel-line w-full"></div>
+                                        <div class="skeleton-block skel-line w-11/12"></div>
+                                        <div class="skeleton-block skel-line w-4/5"></div>
+                                        <div class="skeleton-block h-32 w-full mt-4"></div>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <div class="skeleton-block h-24 w-full"></div>
+                                        <div class="skeleton-block h-24 w-full"></div>
+                                        <div class="skeleton-block h-24 w-full"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dedicated two-column skeleton for compare mode -->
+                        <div id="skeleton-section-compare" class="hidden mt-10">
+                            <div class="flex flex-col items-center justify-center mb-6">
+                                <div class="relative w-10 h-10 mb-3">
+                                    <div class="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-700"></div>
+                                    <div class="absolute inset-0 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"></div>
+                                </div>
+                                <p class="text-brand-600 dark:text-brand-400 font-bold tracking-wide animate-pulse" data-key="loading">Cooking up your packaging plan…</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div class="rounded-3xl bg-white/10 border border-white/10 p-6 space-y-3">
+                                    <div class="skeleton-block h-5 w-1/2"></div>
+                                    <div class="skeleton-block skel-line w-full"></div>
+                                    <div class="skeleton-block skel-line w-5/6"></div>
+                                    <div class="skeleton-block skel-line w-2/3"></div>
+                                    <div class="skeleton-block skel-line w-4/5"></div>
+                                </div>
+                                <div class="rounded-3xl bg-white/10 border border-white/10 p-6 space-y-3">
+                                    <div class="skeleton-block h-5 w-1/2"></div>
+                                    <div class="skeleton-block skel-line w-full"></div>
+                                    <div class="skeleton-block skel-line w-5/6"></div>
+                                    <div class="skeleton-block skel-line w-2/3"></div>
+                                    <div class="skeleton-block skel-line w-4/5"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="generate-error" class="hidden mt-6 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800 p-5 flex items-start gap-4">
+                            <span class="text-2xl">⚠️</span>
+                            <div class="flex-1">
+                                <p id="generate-error-text" class="text-sm font-bold text-red-700 dark:text-red-300">Something went wrong. Please try again.</p>
+                                <button id="generate-error-retry" class="mt-3 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold transition-all">↻ Try again</button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Sticky mini-nav for the result view -->
+            <div id="result-mini-nav" class="hidden mb-4">
+                <div class="glass rounded-2xl px-3 py-2 flex flex-wrap gap-2 shadow-lg">
+                    <a href="#section-recommendation" class="mini-nav-link px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-200 transition-all">📦 Recommendation</a>
+                    <a href="#section-cost" class="mini-nav-link px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-200 transition-all">💰 Cost</a>
+                    <a href="#section-compliance" class="mini-nav-link px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-200 transition-all">✅ Compliance</a>
+                    <a href="#section-trace" class="mini-nav-link px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-200 transition-all">📱 Traceability</a>
+                    <a href="#section-technical" class="mini-nav-link px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-200 transition-all">🔬 Technical</a>
+                </div>
+            </div>
+
             <!-- Results Output -->
-            <div id="result-section" class="hidden mt-12 animate-fade-in-up">
+            <div id="result-section" class="hidden mt-4 animate-fade-in-up">
                 <div class="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 text-white shadow-2xl">
                     <div class="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-lime-300/10 blur-3xl"></div>
                     <div class="absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-cyan-300/10 blur-3xl"></div>
@@ -399,6 +536,7 @@
                             <div class="flex items-center gap-3">
                                 <button id="new-analysis-btn" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition-all" data-key="new_analysis">New Analysis</button>
                                 <button id="copy-report" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-bold transition-all" data-key="copy_btn">📋 Copy report</button>
+                                <button id="download-pdf" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-bold transition-all" data-key="pdf_btn">⬇ Download PDF</button>
                             </div>
                         </div>
                         
@@ -410,35 +548,186 @@
                         </div>
                         
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                            <div class="lg:col-span-2 rounded-3xl bg-white text-slate-900 p-6 sm:p-8 shadow-xl">
+                            <div id="section-recommendation" class="lg:col-span-2 rounded-3xl bg-white text-slate-900 p-6 sm:p-8 shadow-xl scroll-mt-32">
                                 <div class="flex items-center gap-3 mb-5">
                                     <span class="w-11 h-11 rounded-2xl bg-emerald-100 flex items-center justify-center text-2xl">✨</span>
                                     <div><div class="text-xs font-extrabold uppercase tracking-wider text-emerald-600" data-key="ai_rec">Recommendation</div><h3 class="text-xl font-black" data-key="ai_title">Your AI packaging advice</h3></div>
                                 </div>
                                 <div id="result-content" class="prose prose-slate max-w-none"></div>
+
+                                <div id="confidence-badge" class="hidden mt-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold"></div>
+
+                                <div id="section-cost" class="scroll-mt-32"></div>
+                                <div id="roi-card" class="hidden mt-8 pt-6 border-t border-slate-200">
+                                    <div class="flex items-center gap-3 mb-4">
+                                        <span class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-lg">💰</span>
+                                        <h4 class="font-black text-lg" data-key="roi_title">Cost & shelf-life at a glance</h4>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="rounded-2xl border border-slate-200 p-4">
+                                            <div class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2" data-key="roi_cheap">Cheap option</div>
+                                            <div class="text-2xl font-black text-slate-900">₹<span id="roi-cheap-cost" data-count-target="0">—</span></div>
+                                            <div class="text-xs text-slate-500 mt-1" data-key="roi_per_unit">per unit</div>
+                                            <div class="mt-3 text-sm text-slate-600"><span id="roi-cheap-shelf" data-count-target="0">—</span> <span data-key="roi_days_shelf">days shelf life</span></div>
+                                            <div class="text-sm text-red-500 font-bold mt-1">~<span id="roi-cheap-loss" data-count-target="0">—</span>% <span data-key="roi_loss">loss</span></div>
+                                        </div>
+                                        <div class="rounded-2xl border-2 border-brand-400 bg-brand-50 p-4">
+                                            <div class="text-xs font-extrabold uppercase tracking-wider text-brand-600 mb-2" data-key="roi_recommended">Recommended</div>
+                                            <div class="text-2xl font-black text-slate-900">₹<span id="roi-rec-cost" data-count-target="0">—</span></div>
+                                            <div class="text-xs text-slate-500 mt-1" data-key="roi_per_unit">per unit</div>
+                                            <div class="mt-3 text-sm text-slate-600"><span id="roi-rec-shelf" data-count-target="0">—</span> <span data-key="roi_days_shelf">days shelf life</span></div>
+                                            <div class="text-sm text-brand-600 font-bold mt-1">~<span id="roi-rec-loss" data-count-target="0">—</span>% <span data-key="roi_loss">loss</span></div>
+                                        </div>
+                                    </div>
+
+                                    <div id="waste-banner" class="hidden mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 p-4 flex items-center gap-3">
+                                        <span class="text-2xl">🌍</span>
+                                        <p class="text-sm text-emerald-800 font-semibold">
+                                            <span data-key="waste_prefix">Choosing the recommended option means about</span>
+                                            <span id="waste-units" class="font-black">—</span>
+                                            <span data-key="waste_suffix">fewer units spoiled for every 1,000 you pack.</span>
+                                        </p>
+                                    </div>
+
+                                    <div id="comparison-card" class="hidden mt-8 pt-6 border-t border-slate-200">
+                                        <div class="flex items-center gap-3 mb-4">
+                                            <span class="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-lg">📊</span>
+                                            <h4 class="font-black text-lg" data-key="compare_title">Predicted shelf life by material</h4>
+                                        </div>
+                                        <div id="comparison-rows" class="space-y-3"></div>
+                                    </div>
+
+                                    <div id="break-even-card" class="hidden mt-8 pt-6 border-t border-slate-200">
+                                        <div class="flex items-center gap-3 mb-2">
+                                            <span class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center text-lg">📈</span>
+                                            <h4 class="font-black text-lg" data-key="break_even_title">Does the pricier packaging pay for itself?</h4>
+                                        </div>
+                                        <p class="text-xs text-slate-500 mb-3" data-key="break_even_desc">Rough net saving (or extra cost) from using the recommended packaging instead of the cheap option, at different order sizes.</p>
+                                        <div id="break-even-rows" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+                                        <p class="text-[11px] text-slate-400 mt-2" id="break-even-assumption"></p>
+                                    </div>
+
+                                    <div id="map-card" class="hidden mt-8 pt-6 border-t border-slate-200">
+                                    <div class="flex items-center gap-3 mb-4">
+                                        <span class="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center text-lg">🌬️</span>
+                                        <h4 class="font-black text-lg">MAP gas mix</h4>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-4 text-center">
+                                        <div class="rounded-2xl border border-slate-200 p-4">
+                                            <div class="text-xs font-extrabold uppercase text-slate-400">O2</div>
+                                            <div class="text-2xl font-black text-slate-900"><span id="map-o2">—</span>%</div>
+                                        </div>
+                                        <div class="rounded-2xl border border-slate-200 p-4">
+                                            <div class="text-xs font-extrabold uppercase text-slate-400">CO2</div>
+                                            <div class="text-2xl font-black text-slate-900"><span id="map-co2">—</span>%</div>
+                                        </div>
+                                        <div class="rounded-2xl border border-slate-200 p-4">
+                                            <div class="text-xs font-extrabold uppercase text-slate-400">N2</div>
+                                            <div class="text-2xl font-black text-slate-900"><span id="map-n2">—</span>%</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="sustain-card" class="hidden mt-8 pt-6 border-t border-slate-200">
+                                    <div class="flex items-center gap-3 mb-4">
+                                        <span class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-lg">♻️</span>
+                                        <h4 class="font-black text-lg">Sustainability snapshot</h4>
+                                    </div>
+                                    <div class="flex flex-wrap gap-3 mb-3">
+                                        <span id="sustain-recyclability" class="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Recyclability: —</span>
+                                        <span id="sustain-biodegradable" class="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Biodegradable: —</span>
+                                    </div>
+                                    <p id="sustain-note" class="text-sm text-slate-600"></p>
+                                </div>
+                                </div>
                             </div>
-                            <div class="space-y-5">
-                                <div class="rounded-3xl bg-white/10 border border-white/10 p-6">
-                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">🌱</span><h3 class="font-black text-lg" data-key="eco_title">Eco option</h3></div>
-                                    <p class="text-sm text-emerald-100/80" data-key="eco_desc">Check the sustainable alternative in the recommendation for a lower-impact option.</p>
+                            <div id="section-compliance" class="space-y-5 scroll-mt-32">
+                                <div class="rounded-3xl bg-gradient-to-br from-emerald-500/20 to-emerald-700/10 border border-emerald-400/30 p-6 side-card-padded">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">🌱</span><h3 class="font-black text-lg side-card-text" data-key="eco_title">Eco option</h3></div>
+                                    <p class="text-sm text-emerald-100/90 side-card-text" data-key="eco_desc">Check the sustainable alternative in the recommendation for a lower-impact option.</p>
                                 </div>
-                                <div class="rounded-3xl bg-white/10 border border-white/10 p-6">
-                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">💰</span><h3 class="font-black text-lg" data-key="budget_title">Budget option</h3></div>
-                                    <p class="text-sm text-emerald-100/80" data-key="budget_desc">Your budget is considered so the recommendation stays practical.</p>
+                                <div class="rounded-3xl bg-gradient-to-br from-sky-500/20 to-sky-700/10 border border-sky-400/30 p-6 side-card-padded">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">💰</span><h3 class="font-black text-lg side-card-text" data-key="budget_title">Budget option</h3></div>
+                                    <p class="text-sm text-sky-100/90 side-card-text" data-key="budget_desc">Your budget is considered so the recommendation stays practical.</p>
                                 </div>
-                                <div class="rounded-3xl bg-amber-300 text-amber-950 p-6">
-                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">⚠️</span><h3 class="font-black text-lg" data-key="warn_title">Before you produce</h3></div>
-                                    <p class="text-sm font-medium" data-key="warn_desc">Use this as a starting point and validate food-contact compliance and final package performance before production.</p>
+                                <div class="rounded-3xl bg-gradient-to-br from-indigo-500/20 to-indigo-700/10 border border-indigo-400/30 p-6 side-card-padded">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">✅</span><h3 class="font-black text-lg side-card-text" data-key="fssai_title">FSSAI compliance</h3></div>
+                                    <p class="text-sm text-indigo-100/90 side-card-text" data-key="fssai_desc">General reminders are in the recommendation — always confirm exact requirements with FSSAI before production.</p>
+                                </div>
+                                <div class="rounded-3xl bg-amber-300 text-amber-950 p-6 side-card-padded shadow-lg">
+                                    <div class="flex items-center gap-3 mb-3"><span class="text-2xl">⚠️</span><h3 class="font-black text-lg side-card-text" data-key="warn_title">Before you produce</h3></div>
+                                    <p class="text-sm font-medium side-card-text" data-key="warn_desc">Use this as a starting point and validate food-contact compliance and final package performance before production.</p>
                                 </div>
                             </div>
                         </div>
-                        
+
+                        <div id="section-trace" class="scroll-mt-32"></div>
+                        <div id="trace-card" class="hidden mt-5 rounded-3xl bg-white text-slate-900 p-6 sm:p-8 shadow-xl">
+                            <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
+                                <div class="flex items-center gap-3">
+                                    <span class="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-xl">📱</span>
+                                    <div>
+                                        <div class="text-xs font-extrabold uppercase tracking-wider text-slate-500" data-key="trace_tag">Traceability label</div>
+                                        <h3 class="text-xl font-black" data-key="trace_title">Scannable QR for this batch</h3>
+                                    </div>
+                                </div>
+                                <button id="download-qr" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 transition-all" data-key="trace_download">⬇ Download QR</button>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 items-center">
+                                <div class="flex justify-center sm:justify-start">
+                                    <div id="qr-code" class="p-3 bg-white rounded-2xl border border-slate-200 inline-block"></div>
+                                </div>
+                                <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                        <div class="text-xs font-extrabold uppercase tracking-wider text-slate-400" data-key="trace_batch">Batch no.</div>
+                                        <div id="trace-batch" class="font-black text-lg mt-1">—</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs font-extrabold uppercase tracking-wider text-slate-400" data-key="trace_packed">Packed</div>
+                                        <div id="trace-packed" class="font-black text-lg mt-1">—</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs font-extrabold uppercase tracking-wider text-slate-400" data-key="trace_best_before">Best before</div>
+                                        <div id="trace-expiry" class="font-black text-lg mt-1">—</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-5" data-key="trace_note">Print this QR on the pack so anyone can scan it to see the product, batch and dates — a simple, low-cost traceability step for small producers.</p>
+                        </div>
+
+                        <div id="section-technical" class="scroll-mt-32"></div>
                         <details class="mt-5 rounded-3xl bg-white/10 border border-white/10 overflow-hidden">
                             <summary class="cursor-pointer p-5 font-extrabold flex items-center justify-between">
                                 <span><span data-key="tech_title">🔬 Technical details</span> <span class="text-xs text-emerald-200/70 ml-2">OTR · WVTR · thickness · MAP</span></span>
                             </summary>
                             <div id="technical-content" class="px-5 pb-6 text-sm text-emerald-50/90 prose prose-invert max-w-none"></div>
                         </details>
+
+                        <div class="mt-5 rounded-2xl bg-black/20 border border-white/10 p-4 flex items-start gap-3">
+                            <span class="text-lg leading-none">⚠️</span>
+                            <p class="text-xs text-emerald-100/70" data-key="ai_disclaimer">This is an AI-generated draft to help you get started, not a final specification. Always confirm technical specs, food-contact safety and FSSAI compliance with a lab, vendor or compliance professional before production.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Offline fallback banner -->
+            <div id="offline-banner" class="hidden mt-4 rounded-2xl bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 p-4 flex items-center gap-3">
+                <span class="text-xl">📴</span>
+                <p class="text-sm font-semibold text-amber-800 dark:text-amber-200" data-key="offline_note">You're offline — showing your last saved recommendation.</p>
+            </div>
+
+            <!-- Multi-commodity comparison result -->
+            <div id="compare-result" class="hidden mt-12 animate-fade-in-up">
+                <h2 class="text-2xl sm:text-3xl font-black tracking-tight mb-5" data-key="compare_result_title">📦 Side-by-side comparison</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 shadow-xl border border-slate-200 dark:border-slate-800">
+                        <div id="compare-a-name" class="text-xs font-extrabold uppercase tracking-wider text-brand-600 mb-3">—</div>
+                        <div id="compare-a-body" class="space-y-2 text-sm"></div>
+                    </div>
+                    <div class="rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-6 shadow-xl border border-slate-200 dark:border-slate-800">
+                        <div id="compare-b-name" class="text-xs font-extrabold uppercase tracking-wider text-brand-600 mb-3">—</div>
+                        <div id="compare-b-body" class="space-y-2 text-sm"></div>
                     </div>
                 </div>
             </div>
@@ -475,6 +764,8 @@
                 ex_rice: "Rice", ex_rice_sub: "Dry grain · long shelf life",
                 ex_milk: "Milk", ex_milk_sub: "Dairy · cold storage",
                 history_title: "Recent Searches", history_empty: "No packaging searches yet.",
+                history_search_placeholder: "Search past searches...",
+                history_no_match: "No searches match your filter.",
                 opt_fresh: "Fresh produce", opt_dry: "Dry / low-moisture food", opt_snack: "Snack / fried food", opt_dairy: "Dairy", opt_meat: "Meat / seafood", opt_processed: "Processed / ready-to-eat", opt_other: "Other",
                 opt_3days: "3 days", opt_7days: "7 days", opt_14days: "14 days", opt_30days: "30 days", opt_60days: "60 days", opt_90days: "90+ days",
                 opt_room: "Room temperature", opt_fridge: "Refrigerated", opt_frozen: "Frozen", opt_warehouse: "Warehouse", opt_coldchain: "Cold chain",
@@ -483,13 +774,40 @@
                 opt_resp_none: "Not sure", opt_resp_low: "Low", opt_resp_med: "Medium", opt_resp_high: "High",
                 generate: "✨ Show Me My Packaging Plan", loading: "Cooking up your packaging plan…",
                 result_sub: "YOUR PACKAGING PLAN", result_title: "📦 Here's what we'd recommend", result_desc: "Practical guidance first. Technical details when you need them.",
-                new_analysis: "New Analysis", copy_btn: "📋 Copy report",
+                new_analysis: "New Analysis", copy_btn: "📋 Copy report", pdf_btn: "⬇ Download PDF",
+                waste_prefix: "Choosing the recommended option means about", waste_suffix: "fewer units spoiled for every 1,000 you pack.",
+                compare_title: "Predicted shelf life by material",
+                ai_disclaimer: "This is an AI-generated draft to help you get started, not a final specification. Always confirm technical specs, food-contact safety and FSSAI compliance with a lab, vendor or compliance professional before production.",
                 res_food: "Food", res_shelf: "Shelf life", res_storage: "Storage", res_budget: "Budget",
                 ai_rec: "Recommendation", ai_title: "Your AI packaging advice",
+                roi_title: "Cost & shelf-life at a glance", roi_cheap: "Cheap option", roi_recommended: "Recommended", roi_per_unit: "per unit", roi_days_shelf: "days shelf life", roi_loss: "loss",
                 eco_title: "Eco option", eco_desc: "Check the sustainable alternative in the recommendation for a lower-impact option.",
                 budget_title: "Budget option", budget_desc: "Your budget is considered so the recommendation stays practical.",
+                fssai_title: "FSSAI compliance", fssai_desc: "General reminders are in the recommendation — always confirm exact requirements with FSSAI before production.",
                 warn_title: "Before you produce", warn_desc: "Use this as a starting point and validate food-contact compliance and final package performance before production.",
-                tech_title: "🔬 Technical details"
+                trace_tag: "Traceability label", trace_title: "Scannable QR for this batch", trace_download: "⬇ Download QR",
+                trace_batch: "Batch no.", trace_packed: "Packed", trace_best_before: "Best before",
+                trace_note: "Print this QR on the pack so anyone can scan it to see the product, batch and dates — a simple, low-cost traceability step for small producers.",
+                tech_title: "🔬 Technical details",
+                value_per_unit: "Selling price per unit (₹, optional)", ex_value: "e.g. 20",
+                compare_toggle: "Compare with a second food", compare_food_label: "Second food to compare", compare_food_placeholder: "e.g. banana chips",
+                expiring_title: "Expiring Soon", expiring_empty: "No batches expiring in the next 2 weeks.",
+                expiring_days_left: "days left",
+                break_even_title: "Does the pricier packaging pay for itself?",
+                break_even_desc: "Rough net saving (or extra cost) from using the recommended packaging instead of the cheap option, at different order sizes.",
+                break_even_units: "units", break_even_assumption: "Assumes a product value of about ₹{value} per unit (based on what you entered, or a rough default).",
+                confidence_high: "High confidence", confidence_medium: "Medium confidence", confidence_low: "Rough estimate",
+                offline_note: "You're offline — showing your last saved recommendation.",
+                compare_result_title: "📦 Side-by-side comparison",
+                compare_material: "Recommended material", compare_structure: "Structure", compare_cost: "Cost/unit", compare_shelf: "Shelf life", compare_confidence: "Confidence",
+                error_generic: "Something went wrong. Please try again.",
+                error_retry: "↻ Try again",
+                temp_hint: "Enter a temperature between -30°C and 60°C.",
+                humidity_hint: "Enter a humidity between 0% and 100%.",
+                qr_downloaded: "QR code downloaded!",
+                qr_unavailable: "QR code isn't ready to download yet.",
+                validation_fields_prefix: "field needs attention before you generate",
+                validation_fields_prefix_plural: "fields need attention before you generate"
             },
             Hindi: {
                 title: "पैकसेंस एआई", nav_subtitle: "स्मार्ट पैकेजिंग, अब आसान",
@@ -517,6 +835,8 @@
                 ex_rice: "चावल", ex_rice_sub: "सूखा अनाज · लंबी शेल्फ लाइफ",
                 ex_milk: "दूध", ex_milk_sub: "डेयरी · कोल्ड स्टोरेज",
                 history_title: "हाल की खोजें", history_empty: "अभी तक कोई पैकेजिंग खोज नहीं।",
+                history_search_placeholder: "पिछली खोजों में खोजें...",
+                history_no_match: "आपकी खोज से कोई परिणाम नहीं मिला।",
                 opt_fresh: "ताजा उत्पाद", opt_dry: "सूखा भोजन", opt_snack: "स्नैक / तला हुआ", opt_dairy: "डेयरी", opt_meat: "मांस / समुद्री भोजन", opt_processed: "संसाधित (Processed)", opt_other: "अन्य",
                 opt_3days: "3 दिन", opt_7days: "7 दिन", opt_14days: "14 दिन", opt_30days: "30 दिन", opt_60days: "60 दिन", opt_90days: "90+ दिन",
                 opt_room: "कमरे का तापमान", opt_fridge: "फ्रिज में", opt_frozen: "जमा हुआ (Frozen)", opt_warehouse: "गोदाम", opt_coldchain: "कोल्ड चेन",
@@ -525,13 +845,40 @@
                 opt_resp_none: "पता नहीं", opt_resp_low: "कम", opt_resp_med: "मध्यम", opt_resp_high: "उच्च",
                 generate: "✨ मेरी पैकेजिंग योजना दिखाएं", loading: "आपकी पैकेजिंग योजना तैयार की जा रही है…",
                 result_sub: "आपकी पैकेजिंग योजना", result_title: "📦 यहाँ हमारी सिफारिशें हैं", result_desc: "पहले व्यावहारिक मार्गदर्शन। जरूरत पड़ने पर तकनीकी विवरण।",
-                new_analysis: "नया विश्लेषण", copy_btn: "📋 रिपोर्ट कॉपी करें",
+                new_analysis: "नया विश्लेषण", copy_btn: "📋 रिपोर्ट कॉपी करें", pdf_btn: "⬇ PDF डाउनलोड करें",
+                waste_prefix: "अनुशंसित विकल्प चुनने से प्रति 1,000 यूनिट पैक करने पर लगभग", waste_suffix: "कम यूनिट खराब होती हैं।",
+                compare_title: "सामग्री के अनुसार अनुमानित शेल्फ लाइफ",
+                ai_disclaimer: "यह एक एआई-जनित मसौदा है, अंतिम विनिर्देश नहीं। उत्पादन से पहले तकनीकी विवरण, खाद्य-संपर्क सुरक्षा और FSSAI अनुपालन की पुष्टि किसी लैब, विक्रेता या अनुपालन विशेषज्ञ से करें।",
                 res_food: "भोजन", res_shelf: "शेल्फ लाइफ", res_storage: "भंडारण", res_budget: "बजट",
                 ai_rec: "सिफारिश", ai_title: "आपकी एआई पैकेजिंग सलाह",
+                roi_title: "लागत और शेल्फ-लाइफ एक नज़र में", roi_cheap: "सस्ता विकल्प", roi_recommended: "अनुशंसित", roi_per_unit: "प्रति यूनिट", roi_days_shelf: "दिन शेल्फ लाइफ", roi_loss: "नुकसान",
                 eco_title: "ईको विकल्प", eco_desc: "कम प्रभाव वाले विकल्प के लिए सिफारिश में टिकाऊ विकल्प की जाँच करें।",
                 budget_title: "बजट विकल्प", budget_desc: "आपके बजट पर विचार किया गया है ताकि सिफारिश व्यावहारिक रहे।",
+                fssai_title: "FSSAI अनुपालन", fssai_desc: "सामान्य अनुस्मारक सिफारिश में हैं — उत्पादन से पहले FSSAI से सटीक आवश्यकताओं की पुष्टि करें।",
                 warn_title: "उत्पादन से पहले", warn_desc: "इसे एक प्रारंभिक बिंदु के रूप में उपयोग करें और उत्पादन से पहले परीक्षण करें।",
-                tech_title: "🔬 तकनीकी विवरण"
+                trace_tag: "ट्रेसेबिलिटी लेबल", trace_title: "इस बैच के लिए स्कैन करने योग्य QR", trace_download: "⬇ QR डाउनलोड करें",
+                trace_batch: "बैच नं.", trace_packed: "पैक किया गया", trace_best_before: "इससे पहले उपयोग करें",
+                trace_note: "इस QR को पैक पर छापें ताकि कोई भी उत्पाद, बैच और तारीखें देखने के लिए इसे स्कैन कर सके — छोटे उत्पादकों के लिए एक सरल, कम लागत वाला ट्रेसेबिलिटी कदम।",
+                tech_title: "🔬 तकनीकी विवरण",
+                value_per_unit: "प्रति यूनिट बिक्री मूल्य (₹, वैकल्पिक)", ex_value: "उदा. 20",
+                compare_toggle: "दूसरे भोजन से तुलना करें", compare_food_label: "तुलना के लिए दूसरा भोजन", compare_food_placeholder: "उदा. केले के चिप्स",
+                expiring_title: "जल्द समाप्त होने वाले", expiring_empty: "अगले 2 हफ्तों में कोई बैच समाप्त नहीं हो रहा।",
+                expiring_days_left: "दिन शेष",
+                break_even_title: "क्या महंगी पैकेजिंग अपनी लागत निकाल पाती है?",
+                break_even_desc: "अलग-अलग ऑर्डर आकार पर, सस्ते विकल्प की जगह अनुशंसित पैकेजिंग अपनाने से होने वाली अनुमानित शुद्ध बचत (या अतिरिक्त लागत)।",
+                break_even_units: "यूनिट", break_even_assumption: "यह अनुमान लगभग ₹{value} प्रति यूनिट उत्पाद मूल्य पर आधारित है (आपके इनपुट या एक मोटे डिफ़ॉल्ट के अनुसार)।",
+                confidence_high: "उच्च विश्वसनीयता", confidence_medium: "मध्यम विश्वसनीयता", confidence_low: "मोटा अनुमान",
+                offline_note: "आप ऑफ़लाइन हैं — आपकी अंतिम सहेजी गई सिफारिश दिखाई जा रही है।",
+                compare_result_title: "📦 आमने-सामने तुलना",
+                compare_material: "अनुशंसित सामग्री", compare_structure: "संरचना", compare_cost: "लागत/यूनिट", compare_shelf: "शेल्फ लाइफ", compare_confidence: "विश्वसनीयता",
+                error_generic: "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
+                error_retry: "↻ पुनः प्रयास करें",
+                temp_hint: "-30°C और 60°C के बीच तापमान दर्ज करें।",
+                humidity_hint: "0% और 100% के बीच आर्द्रता दर्ज करें।",
+                qr_downloaded: "QR कोड डाउनलोड हो गया!",
+                qr_unavailable: "QR कोड अभी डाउनलोड के लिए तैयार नहीं है।",
+                validation_fields_prefix: "फ़ील्ड पर ध्यान देने की आवश्यकता है",
+                validation_fields_prefix_plural: "फ़ील्ड पर ध्यान देने की आवश्यकता है"
             },
             Marathi: {
                 title: "पॅकसेंस एआय", nav_subtitle: "स्मार्ट पॅकेजिंग, आता सोपे",
@@ -559,6 +906,8 @@
                 ex_rice: "तांदूळ", ex_rice_sub: "सुके धान्य · दीर्घ शेल्फ लाइफ",
                 ex_milk: "दूध", ex_milk_sub: "डेअरी · कोल्ड स्टोरेज",
                 history_title: "अलीकडील शोध", history_empty: "अद्याप कोणतेही पॅकेजिंग शोध नाहीत.",
+                history_search_placeholder: "मागील शोधांमध्ये शोधा...",
+                history_no_match: "तुमच्या फिल्टरशी जुळणारे कोणतेही शोध नाहीत.",
                 opt_fresh: "ताजे उत्पादन", opt_dry: "सुके अन्न", opt_snack: "स्नॅक / तळलेले", opt_dairy: "डेअरी", opt_meat: "मांस / सीफूड", opt_processed: "प्रक्रिया केलेले (Processed)", opt_other: "इतर",
                 opt_3days: "3 दिवस", opt_7days: "7 दिवस", opt_14days: "14 दिवस", opt_30days: "30 दिवस", opt_60days: "60 दिवस", opt_90days: "90+ दिवस",
                 opt_room: "खोलीचे तापमान", opt_fridge: "फ्रीजमध्ये", opt_frozen: "गोठवलेले (Frozen)", opt_warehouse: "गोदाम", opt_coldchain: "कोल्ड चेन",
@@ -567,15 +916,56 @@
                 opt_resp_none: "माहित नाही", opt_resp_low: "कमी", opt_resp_med: "मध्यम", opt_resp_high: "उच्च",
                 generate: "✨ माझी पॅकेजिंग योजना दाखवा", loading: "तुमची पॅकेजिंग योजना तयार होत आहे…",
                 result_sub: "तुमची पॅकेजिंग योजना", result_title: "📦 ही आमची शिफारस आहे", result_desc: "प्रथम व्यावहारिक मार्गदर्शन. गरज पडल्यास तांत्रिक तपशील.",
-                new_analysis: "नवीन विश्लेषण", copy_btn: "📋 अहवाल कॉपी करा",
+                new_analysis: "नवीन विश्लेषण", copy_btn: "📋 अहवाल कॉपी करा", pdf_btn: "⬇ PDF डाउनलोड करा",
+                waste_prefix: "शिफारस केलेला पर्याय निवडल्यास दर 1,000 युनिट पॅक केल्यावर अंदाजे", waste_suffix: "कमी युनिट खराब होतात.",
+                compare_title: "सामग्रीनुसार अंदाजित शेल्फ लाइफ",
+                ai_disclaimer: "हा एआय-निर्मित मसुदा आहे, अंतिम तपशील नाही. उत्पादनापूर्वी तांत्रिक तपशील, अन्न-संपर्क सुरक्षा आणि FSSAI अनुपालनाची खात्री लॅब, विक्रेता किंवा अनुपालन तज्ञाकडून करा.",
                 res_food: "अन्न", res_shelf: "शेल्फ लाइफ", res_storage: "साठवणूक", res_budget: "बजेट",
                 ai_rec: "शिफारस", ai_title: "तुमचा एआय पॅकेजिंग सल्ला",
+                roi_title: "किंमत आणि शेल्फ-लाइफ एका दृष्टिक्षेपात", roi_cheap: "स्वस्त पर्याय", roi_recommended: "शिफारस केलेले", roi_per_unit: "प्रति युनिट", roi_days_shelf: "दिवस शेल्फ लाइफ", roi_loss: "नुकसान",
                 eco_title: "इको पर्याय", eco_desc: "कमी परिणामाच्या पर्यायासाठी शिफारसीतील शाश्वत पर्याय तपासा.",
                 budget_title: "बजेट पर्याय", budget_desc: "तुमच्या बजेटचा विचार केला गेला आहे जेणेकरून शिफारस व्यावहारिक राहील.",
+                fssai_title: "FSSAI अनुपालन", fssai_desc: "सर्वसाधारण आठवणी शिफारसीत आहेत — उत्पादनापूर्वी FSSAI कडून नेमक्या आवश्यकतांची खात्री करा.",
                 warn_title: "उत्पादनापूर्वी", warn_desc: "हा सुरुवातीचा बिंदू म्हणून वापरा आणि उत्पादनापूर्वी चाचणी करा.",
-                tech_title: "🔬 तांत्रिक तपशील"
+                trace_tag: "ट्रेसेबिलिटी लेबल", trace_title: "या बॅचसाठी स्कॅन करण्यायोग्य QR", trace_download: "⬇ QR डाउनलोड करा",
+                trace_batch: "बॅच क्र.", trace_packed: "पॅक केले", trace_best_before: "या तारखेपूर्वी वापरा",
+                trace_note: "हे QR पॅकवर छापा जेणेकरून कोणीही उत्पादन, बॅच आणि तारखा पाहण्यासाठी ते स्कॅन करू शकेल — छोट्या उत्पादकांसाठी एक सोपी, कमी किमतीची ट्रेसेबिलिटी पायरी.",
+                tech_title: "🔬 तांत्रिक तपशील",
+                value_per_unit: "प्रति युनिट विक्री किंमत (₹, ऐच्छिक)", ex_value: "उदा. 20",
+                compare_toggle: "दुसऱ्या अन्नाशी तुलना करा", compare_food_label: "तुलनेसाठी दुसरे अन्न", compare_food_placeholder: "उदा. केळीचे चिप्स",
+                expiring_title: "लवकरच संपणारे", expiring_empty: "पुढील 2 आठवड्यांत कोणतेही बॅच संपत नाहीत.",
+                expiring_days_left: "दिवस शिल्लक",
+                break_even_title: "महाग पॅकेजिंग स्वतःचा खर्च भरून काढते का?",
+                break_even_desc: "वेगवेगळ्या ऑर्डर आकारांवर, स्वस्त पर्यायाऐवजी शिफारस केलेले पॅकेजिंग वापरल्याने होणारी अंदाजे निव्वळ बचत (किंवा अतिरिक्त खर्च).",
+                break_even_units: "युनिट्स", break_even_assumption: "हा अंदाज साधारण ₹{value} प्रति युनिट उत्पादन मूल्यावर आधारित आहे (तुमच्या इनपुटनुसार किंवा ढोबळ डीफॉल्टनुसार).",
+                confidence_high: "उच्च विश्वासार्हता", confidence_medium: "मध्यम विश्वासार्हता", confidence_low: "ढोबळ अंदाज",
+                offline_note: "तुम्ही ऑफलाइन आहात — तुमची शेवटची जतन केलेली शिफारस दाखवत आहोत.",
+                compare_result_title: "📦 शेजारी-शेजारी तुलना",
+                compare_material: "शिफारस केलेली सामग्री", compare_structure: "रचना", compare_cost: "किंमत/युनिट", compare_shelf: "शेल्फ लाइफ", compare_confidence: "विश्वासार्हता",
+                error_generic: "काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+                error_retry: "↻ पुन्हा प्रयत्न करा",
+                temp_hint: "-30°C आणि 60°C दरम्यान तापमान प्रविष्ट करा.",
+                humidity_hint: "0% आणि 100% दरम्यान आर्द्रता प्रविष्ट करा.",
+                qr_downloaded: "QR कोड डाउनलोड झाला!",
+                qr_unavailable: "QR कोड अजून डाउनलोडसाठी तयार नाही.",
+                validation_fields_prefix: "फील्डकडे लक्ष देणे आवश्यक आहे",
+                validation_fields_prefix_plural: "फील्ड्सकडे लक्ष देणे आवश्यक आहे"
             }
         };
+
+        // The entrance animation leaves a `transform` on the animated element
+        // forever (animation-fill-mode: forwards). Any transform on an
+        // ancestor breaks position:sticky for its children — that's what was
+        // causing the mini-nav (and the sidebar's sticky presets panel) to
+        // drift out of place instead of sticking to the real viewport. Once
+        // any fade-in finishes, drop its transform so sticky works normally.
+        // Delegated (not a one-time per-element listener) because
+        // #result-section re-triggers this same animation later on.
+        document.addEventListener('animationend', (e) => {
+            if (e.target.classList && e.target.classList.contains('animate-fade-in-up')) {
+                e.target.style.transform = 'none';
+            }
+        });
 
         const html = document.documentElement;
         const themeBtn = document.getElementById('theme-toggle');
@@ -590,6 +980,22 @@
                 iconMoon.classList.add('hidden'); iconSun.classList.remove('hidden');
             }
         };
+
+        // --- COMPACT MODE TOGGLE ---
+        const compactBtn = document.getElementById('compact-toggle');
+        function applyCompactMode(on) {
+            document.body.classList.toggle('compact-mode', on);
+            compactBtn.classList.toggle('bg-brand-500', on);
+            compactBtn.classList.toggle('text-white', on);
+            compactBtn.classList.toggle('border-brand-500', on);
+        }
+        compactBtn.onclick = () => {
+            const on = !document.body.classList.contains('compact-mode');
+            applyCompactMode(on);
+            localStorage.setItem('packsense-compact', on ? '1' : '0');
+            compactBtn.blur(); // avoid the browser's own focus ring lingering and looking "stuck"
+        };
+        applyCompactMode(localStorage.getItem('packsense-compact') === '1');
 
         function applyLanguage(lang, isUserAction = false) {
             const dictionary = i18n[lang] || i18n.English;
@@ -626,10 +1032,21 @@
             populateResultMeta(); 
 
             // Feature: Auto-regenerate AI Response if the user changes language while viewing the result!
+            // Confirm first — this fires a real AI call, and switching the
+            // dropdown by accident shouldn't silently trigger one.
             if (isUserAction) {
                 const resultSection = document.getElementById('result-section');
-                if (resultSection && !resultSection.classList.contains('hidden')) {
-                    document.getElementById('btn-generate').click();
+                const compareSection = document.getElementById('compare-result');
+                const showingResult = (resultSection && !resultSection.classList.contains('hidden')) ||
+                                       (compareSection && !compareSection.classList.contains('hidden'));
+                if (showingResult) {
+                    const confirmMsg = dictionary.confirm_regenerate ||
+                        "Switch language and regenerate this recommendation? This will make a new AI request.";
+                    if (window.confirm(confirmMsg)) {
+                        document.getElementById('btn-generate').click();
+                    } else {
+                        showToast(dictionary.toast_lang_kept || "Language updated for labels; recommendation text unchanged.", "info");
+                    }
                 }
             }
         }
@@ -650,6 +1067,86 @@
             advancedChevron.classList.toggle('rotate-180');
         };
 
+        // Multi-commodity compare toggle
+        document.getElementById('compare-toggle').onchange = (e) => {
+            document.getElementById('compare-food-wrap').classList.toggle('hidden', !e.target.checked);
+        };
+
+        // --- EXTRA NOTES CHARACTER COUNTER ---
+        (function setupExtraNotesCounter() {
+            const input = document.getElementById('extra_notes');
+            const counter = document.getElementById('extra-notes-count');
+            if (!input || !counter) return;
+            const max = parseInt(input.getAttribute('maxlength'), 10) || 300;
+            const update = () => {
+                const len = input.value.length;
+                counter.textContent = `${len} / ${max}`;
+                counter.classList.toggle('text-amber-500', len >= max * 0.9 && len < max);
+                counter.classList.toggle('text-red-500', len >= max);
+                counter.classList.toggle('text-slate-400', len < max * 0.9);
+            };
+            input.addEventListener('input', update);
+            update();
+        })();
+
+        // --- INPUT VALIDATION (temperature / humidity clamps) ---
+        function clampField(inputEl, hintEl, min, max, hintKey) {
+            if (!inputEl) return;
+            const validate = () => {
+                const raw = inputEl.value;
+                if (raw === "") { inputEl.classList.remove('input-invalid'); hintEl?.classList.add('hidden'); return; }
+                const num = parseFloat(raw);
+                const lang = document.getElementById('lang-select').value;
+                const dict = i18n[lang] || i18n.English;
+                if (isNaN(num) || num < min || num > max) {
+                    inputEl.classList.add('input-invalid');
+                    if (hintEl) { hintEl.textContent = dict[hintKey] || ""; hintEl.classList.remove('hidden'); }
+                } else {
+                    inputEl.classList.remove('input-invalid');
+                    hintEl?.classList.add('hidden');
+                }
+                updateValidationSummary();
+            };
+            inputEl.addEventListener('input', validate);
+            inputEl.addEventListener('blur', () => {
+                const num = parseFloat(inputEl.value);
+                if (!isNaN(num)) {
+                    if (num < min) inputEl.value = min;
+                    if (num > max) inputEl.value = max;
+                }
+                validate();
+            });
+        }
+        clampField(document.getElementById('temp'), document.getElementById('temp-hint'), -30, 60, 'temp_hint');
+        clampField(document.getElementById('humidity'), document.getElementById('humidity-hint'), 0, 100, 'humidity_hint');
+
+        // --- FIELD-LEVEL VALIDATION SUMMARY ---
+        // Returns the list of currently-invalid field elements (those with
+        // the .input-invalid class applied by clampField above).
+        function getInvalidFields() {
+            return Array.from(document.querySelectorAll('#input-stage .input-invalid'));
+        }
+        function hasInvalidFields() {
+            return getInvalidFields().length > 0;
+        }
+        function updateValidationSummary() {
+            const box = document.getElementById('validation-summary');
+            if (!box) return;
+            const invalidCount = getInvalidFields().length;
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            if (invalidCount === 0) {
+                box.classList.add('hidden');
+                box.innerText = '';
+                return;
+            }
+            const label = invalidCount === 1
+                ? (dict.validation_fields_prefix || "field needs attention before you generate")
+                : (dict.validation_fields_prefix_plural || "fields need attention before you generate");
+            box.innerText = `⚠️ ${invalidCount} ${label}`;
+            box.classList.remove('hidden');
+        }
+
         // --- AUTH LOGIC ---
         let isLogin = true;
         const btnLogin = document.getElementById('btn-show-login');
@@ -665,6 +1162,14 @@
             btnSignup.className = "flex-1 py-2 text-sm font-bold rounded-lg bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-white transition-all";
             btnLogin.className = "flex-1 py-2 text-sm font-bold rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all";
         };
+
+        function enterApp() {
+            const appSec = document.getElementById('app-section');
+            appSec.classList.remove('hidden');
+            appSec.parentElement.classList.remove('opacity-0', 'animate-fade-in-up');
+            void appSec.parentElement.offsetWidth;
+            appSec.parentElement.classList.add('animate-fade-in-up');
+        }
 
         document.getElementById('btn-submit-auth').onclick = async () => {
             const user = document.getElementById('auth-user').value;
@@ -685,12 +1190,7 @@
                     document.getElementById('nav-auth-controls').classList.remove('hidden');
                     document.getElementById('nav-auth-controls').classList.add('flex');
                     document.getElementById('welcome-msg').innerText = `Hi, ${data.username}`;
-                    
-                    const appSec = document.getElementById('app-section');
-                    appSec.classList.remove('hidden');
-                    appSec.parentElement.classList.remove('opacity-0', 'animate-fade-in-up');
-                    void appSec.parentElement.offsetWidth; 
-                    appSec.parentElement.classList.add('animate-fade-in-up');
+                    enterApp();
                 } else {
                     msg.className = "text-center text-sm font-bold mt-4 h-4 text-brand-500";
                     msg.innerText = "Account created! You can now log in.";
@@ -706,6 +1206,22 @@
             await fetch('/api/logout', { method: 'POST' });
             location.reload(); 
         };
+
+        // Restore a logged-in session view on refresh via /api/whoami
+        (async function tryRestoreSession() {
+            try {
+                const res = await fetch('/api/whoami');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data && data.username) {
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('nav-auth-controls').classList.remove('hidden');
+                    document.getElementById('nav-auth-controls').classList.add('flex');
+                    document.getElementById('welcome-msg').innerText = `Hi, ${data.username}`;
+                    enterApp();
+                }
+            } catch (e) { /* offline or not logged in — stay on auth screen */ }
+        })();
 
         // --- PARSING UTILS ---
         function cleanAIText(text) {
@@ -723,6 +1239,8 @@
         }
 
         let lastRecommendation = "";
+        let currentQR = null;
+        let lastFailedRun = null; // { compareMode, payload, commodityB } — used by the retry button
 
         function extractTechnicalSection(text) {
             const lower = text.toLowerCase();
@@ -747,7 +1265,287 @@
             document.getElementById("result-budget").innerText = budgetEl.options[budgetEl.selectedIndex]?.text || "—";
         }
 
+        // --- CONFIDENCE BADGE ---
+        function populateConfidenceBadge(roi) {
+            const badge = document.getElementById("confidence-badge");
+            const conf = roi && roi.confidence;
+            if (!conf || !conf.confidence_level) {
+                badge.classList.add("hidden");
+                return;
+            }
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            const labelKey = "confidence_" + conf.confidence_level;
+            const colors = {
+                high: "bg-emerald-100 text-emerald-700",
+                medium: "bg-amber-100 text-amber-700",
+                low: "bg-red-100 text-red-700"
+            };
+            badge.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold " + (colors[conf.confidence_level] || colors.low);
+            badge.innerText = `${dict[labelKey] || conf.confidence_level} — ${conf.confidence_note || ""}`;
+            badge.classList.remove("hidden");
+        }
+
+        // --- COUNT-UP ANIMATION FOR NUMBERS ---
+        function animateCountUp(el, targetValue, opts = {}) {
+            if (el == null || targetValue == null || isNaN(targetValue)) return;
+            const duration = opts.duration || 700;
+            const decimals = opts.decimals || 0;
+            const start = 0;
+            const startTime = performance.now();
+            function tick(now) {
+                const progress = Math.min((now - startTime) / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+                const current = start + (targetValue - start) * eased;
+                el.textContent = decimals > 0 ? current.toFixed(decimals) : Math.round(current).toLocaleString("en-IN");
+                if (progress < 1) requestAnimationFrame(tick);
+                else el.textContent = decimals > 0 ? targetValue.toFixed(decimals) : Math.round(targetValue).toLocaleString("en-IN");
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // --- BREAK-EVEN / COST-AT-VOLUME TABLE ---
+        function populateBreakEven(roi) {
+            const card = document.getElementById("break-even-card");
+            const rowsBox = document.getElementById("break-even-rows");
+            const assumptionBox = document.getElementById("break-even-assumption");
+            const breakEven = roi && roi.break_even;
+
+            if (!breakEven || !Array.isArray(breakEven.rows) || !breakEven.rows.length) {
+                card.classList.add("hidden");
+                return;
+            }
+
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+
+            rowsBox.innerHTML = breakEven.rows.map((row, idx) => {
+                const positive = row.net_saving >= 0;
+                const colorClass = positive ? "text-emerald-600" : "text-red-500";
+                const sign = positive ? "+" : "−";
+                return `
+                    <div class="rounded-2xl border border-slate-200 p-4 text-center">
+                        <div class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-1">${row.units.toLocaleString("en-IN")} ${dict.break_even_units || "units"}</div>
+                        <div class="text-xl font-black ${colorClass}"><span class="be-sign">${sign}₹</span><span class="be-value" data-target="${Math.abs(row.net_saving)}">0</span></div>
+                    </div>
+                `;
+            }).join("");
+
+            rowsBox.querySelectorAll(".be-value").forEach(el => animateCountUp(el, parseFloat(el.dataset.target)));
+
+            const assumptionTemplate = dict.break_even_assumption || "Assumes a product value of about ₹{value} per unit.";
+            assumptionBox.innerText = assumptionTemplate.replace("{value}", breakEven.assumed_value_per_unit ?? "—");
+
+            card.classList.remove("hidden");
+        }
+
+        // --- ROI / COST COMPARISON CARD ---
+        function populateRoiCard(roi) {
+            const card = document.getElementById("roi-card");
+            const mapCard = document.getElementById("map-card");
+            const sustainCard = document.getElementById("sustain-card");
+            const wasteBanner = document.getElementById("waste-banner");
+            const comparisonCard = document.getElementById("comparison-card");
+
+            populateConfidenceBadge(roi);
+            populateBreakEven(roi);
+
+            if (!roi) {
+                card.classList.add("hidden");
+                mapCard.classList.add("hidden");
+                sustainCard.classList.add("hidden");
+                wasteBanner.classList.add("hidden");
+                comparisonCard.classList.add("hidden");
+                document.getElementById("break-even-card").classList.add("hidden");
+                return;
+            }
+
+            card.classList.remove("hidden");
+            // Count-up animate the headline ROI numbers instead of a flat set
+            const cheapCost = document.getElementById("roi-cheap-cost");
+            const cheapShelf = document.getElementById("roi-cheap-shelf");
+            const cheapLoss = document.getElementById("roi-cheap-loss");
+            const recCost = document.getElementById("roi-rec-cost");
+            const recShelf = document.getElementById("roi-rec-shelf");
+            const recLoss = document.getElementById("roi-rec-loss");
+
+            if (roi.cheap_cost_per_unit != null) animateCountUp(cheapCost, roi.cheap_cost_per_unit); else cheapCost.textContent = "—";
+            if (roi.cheap_shelf_life_days != null) animateCountUp(cheapShelf, roi.cheap_shelf_life_days); else cheapShelf.textContent = "—";
+            if (roi.cheap_loss_percent != null) animateCountUp(cheapLoss, roi.cheap_loss_percent, {decimals: roi.cheap_loss_percent % 1 !== 0 ? 1 : 0}); else cheapLoss.textContent = "—";
+            if (roi.recommended_cost_per_unit != null) animateCountUp(recCost, roi.recommended_cost_per_unit); else recCost.textContent = "—";
+            if (roi.recommended_shelf_life_days != null) animateCountUp(recShelf, roi.recommended_shelf_life_days); else recShelf.textContent = "—";
+            if (roi.recommended_loss_percent != null) animateCountUp(recLoss, roi.recommended_loss_percent, {decimals: roi.recommended_loss_percent % 1 !== 0 ? 1 : 0}); else recLoss.textContent = "—";
+
+            // MAP gas card
+            if (roi.map_relevant && (roi.map_o2_percent != null || roi.map_co2_percent != null || roi.map_n2_percent != null)) {
+                mapCard.classList.remove("hidden");
+                document.getElementById("map-o2").innerText = roi.map_o2_percent ?? "—";
+                document.getElementById("map-co2").innerText = roi.map_co2_percent ?? "—";
+                document.getElementById("map-n2").innerText = roi.map_n2_percent ?? "—";
+            } else {
+                mapCard.classList.add("hidden");
+            }
+
+            // Sustainability card
+            if (roi.recyclability || roi.sustainability_note) {
+                sustainCard.classList.remove("hidden");
+                document.getElementById("sustain-recyclability").innerText = `Recyclability: ${roi.recyclability ?? "—"}`;
+                document.getElementById("sustain-biodegradable").innerText = `Biodegradable: ${roi.biodegradable === true ? "Yes" : (roi.biodegradable === false ? "No" : "—")}`;
+                document.getElementById("sustain-note").innerText = roi.sustainability_note ?? "";
+            } else {
+                sustainCard.classList.add("hidden");
+            }
+
+            // Waste-reduction banner
+            if (roi.waste_units_saved_per_1000 != null && roi.waste_units_saved_per_1000 > 0) {
+                wasteBanner.classList.remove("hidden");
+                document.getElementById("waste-units").innerText = `≈${roi.waste_units_saved_per_1000}`;
+            } else {
+                wasteBanner.classList.add("hidden");
+            }
+
+            // Packaging comparison (predicted shelf life per material)
+            const rows = document.getElementById("comparison-rows");
+            if (Array.isArray(roi.packaging_comparison) && roi.packaging_comparison.length > 0) {
+                comparisonCard.classList.remove("hidden");
+                rows.innerHTML = roi.packaging_comparison.map(item => `
+                    <div class="rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div class="font-extrabold text-slate-900">${escapeHtml(item.name ?? "—")}</div>
+                            ${item.note ? `<div class="text-xs text-slate-500 mt-1">${escapeHtml(item.note)}</div>` : ""}
+                        </div>
+                        <div class="flex items-center gap-4 text-sm">
+                            <div class="text-center">
+                                <div class="font-black text-slate-900">${item.predicted_shelf_life_days ?? "—"}</div>
+                                <div class="text-[11px] text-slate-400 uppercase font-bold">days</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="font-black text-slate-900">₹${item.cost_per_unit ?? "—"}</div>
+                                <div class="text-[11px] text-slate-400 uppercase font-bold">per unit</div>
+                            </div>
+                            ${item.suitability ? `<span class="px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold whitespace-nowrap">${escapeHtml(item.suitability)}</span>` : ""}
+                        </div>
+                    </div>
+                `).join("");
+            } else {
+                comparisonCard.classList.add("hidden");
+                rows.innerHTML = "";
+            }
+        }
+
+        // --- TRACEABILITY / QR CARD ---
+        function populateTraceCard(trace) {
+            const card = document.getElementById("trace-card");
+            if (!trace) { card.classList.add("hidden"); return; }
+            card.classList.remove("hidden");
+            document.getElementById("trace-batch").innerText = trace.batch_no || "—";
+            document.getElementById("trace-packed").innerText = trace.pack_date || "—";
+            document.getElementById("trace-expiry").innerText = trace.expiry_date || "—";
+
+            const qrHolder = document.getElementById("qr-code");
+            qrHolder.innerHTML = "";
+            if (window.QRCode) {
+                currentQR = new QRCode(qrHolder, {
+                    text: trace.trace_string || trace.batch_no || "PackSense AI",
+                    width: 128,
+                    height: 128,
+                    colorDark: "#0f172a",
+                    colorLight: "#ffffff"
+                });
+            } else {
+                qrHolder.innerText = "QR unavailable offline";
+            }
+        }
+
+        document.getElementById("download-qr").onclick = () => {
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            const qrHolder = document.getElementById("qr-code");
+            const img = qrHolder.querySelector("img");
+            const canvas = qrHolder.querySelector("canvas");
+            const dataUrl = img ? img.src : (canvas ? canvas.toDataURL("image/png") : null);
+            if (!dataUrl) {
+                showToast(dict.qr_unavailable || "QR code isn't ready to download yet.", "warning");
+                return;
+            }
+            const a = document.createElement("a");
+            const batch = document.getElementById("trace-batch").innerText || "packsense-qr";
+            a.href = dataUrl;
+            a.download = `${batch}.png`;
+            a.click();
+            showToast(dict.qr_downloaded || "QR code downloaded!", "success");
+        };
+
+        // --- EXPIRING SOON ---
+        async function loadExpiringSoon() {
+            const box = document.getElementById("expiring-list");
+            if (!box) return;
+            try {
+                const response = await fetch("/api/upcoming-expiry");
+                if (!response.ok) return;
+                const items = await response.json();
+                const lang = document.getElementById('lang-select').value;
+                const dict = i18n[lang] || i18n.English;
+
+                if (!items.length) {
+                    box.innerHTML = `
+                        <div class="flex flex-col items-center text-center py-4 px-2">
+                            <span class="text-3xl mb-2 opacity-70">🗓️</span>
+                            <div class="text-sm text-slate-500">${dict.expiring_empty || "Nothing expiring soon."}</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                box.innerHTML = items.map(item => `
+                    <div class="p-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+                        <div class="font-bold text-sm">${escapeHtml(item.commodity || "—")}</div>
+                        <div class="text-xs text-slate-500 mt-1">${escapeHtml(item.batch_no || "")} · ${item.days_left} ${dict.expiring_days_left || "days left"}</div>
+                    </div>
+                `).join("");
+            } catch (e) {
+                console.error("Could not load expiring batches:", e);
+            }
+        }
+
         // --- HISTORY ---
+        let allHistoryItems = [];
+
+        function renderHistoryList(items) {
+            const historyPanel = document.getElementById("history-list");
+            if (!historyPanel) return;
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+
+            if (!items.length) {
+                const emptyMsg = allHistoryItems.length
+                    ? (dict.history_no_match || "No searches match your filter.")
+                    : (dict.history_empty || i18n.English.history_empty);
+                historyPanel.innerHTML = `
+                    <div class="flex flex-col items-center text-center py-4 px-2">
+                        <span class="text-3xl mb-2 opacity-70">🔍</span>
+                        <div class="text-sm text-slate-500">${emptyMsg}</div>
+                    </div>
+                `;
+                return;
+            }
+
+            historyPanel.innerHTML = items.map((item) => `
+                <button type="button" class="history-item w-full text-left p-3 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition border border-transparent hover:border-brand-200 dark:hover:border-brand-800" data-history-index="${item.__idx}">
+                    <div class="font-bold text-sm">${escapeHtml(item.commodity || "Packaging analysis")}</div>
+                    <div class="text-xs text-slate-500 mt-1">${escapeHtml(item.timestamp || "")}</div>
+                </button>
+            `).join("");
+
+            historyPanel.querySelectorAll(".history-item").forEach((button) => {
+                button.onclick = () => {
+                    const item = allHistoryItems[Number(button.dataset.historyIndex)];
+                    if (!item) return;
+                    showResultFromData(item.commodity, { recommendation: item.recommendation, roi_data: item.roi_data, trace: item.trace });
+                };
+            });
+        }
+
         async function loadSearchHistory() {
             const historyPanel = document.getElementById("history-list");
             if (!historyPanel) return;
@@ -756,51 +1554,23 @@
                 const response = await fetch("/api/history");
                 if (!response.ok) return;
                 const items = await response.json();
-
-                if (!items.length) {
-                    const lang = document.getElementById('lang-select').value;
-                    const emptyMsg = i18n[lang]?.history_empty || i18n.English.history_empty;
-                    historyPanel.innerHTML = `<div class="text-sm text-slate-500">${emptyMsg}</div>`;
-                    return;
-                }
-
-                historyPanel.innerHTML = items.map((item, index) => `
-                    <button type="button" class="history-item w-full text-left p-3 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition border border-transparent hover:border-brand-200 dark:hover:border-brand-800" data-history-index="${index}">
-                        <div class="font-bold text-sm">${escapeHtml(item.commodity || "Packaging analysis")}</div>
-                        <div class="text-xs text-slate-500 mt-1">${escapeHtml(item.timestamp || "")}</div>
-                    </button>
-                `).join("");
-
-                historyPanel.querySelectorAll(".history-item").forEach((button) => {
-                    button.onclick = () => {
-                        const item = items[Number(button.dataset.historyIndex)];
-                        if (!item) return;
-
-                        const sidePresets = document.getElementById('side-presets');
-                        const mainInput = document.getElementById('main-input-area');
-                        if(sidePresets && mainInput) {
-                            sidePresets.classList.add('hidden');
-                            mainInput.classList.remove('lg:col-span-2');
-                            mainInput.classList.add('lg:col-span-3');
-                        }
-
-                        document.getElementById("input-stage")?.classList.add("hidden");
-                        document.getElementById("result-section")?.classList.remove("hidden");
-
-                        lastRecommendation = cleanAIText(item.recommendation || "");
-                        const split = extractTechnicalSection(lastRecommendation);
-                        document.getElementById("result-content").innerHTML = marked.parse(split.main);
-                        document.getElementById("technical-content").innerHTML = marked.parse(split.technical || "No separate technical details were provided.");
-
-                        const food = document.getElementById("result-food");
-                        if (food) food.innerText = item.commodity || "—";
-                        window.scrollTo({top: 0, behavior: "smooth"});
-                    };
-                });
+                allHistoryItems = items.map((item, idx) => ({ ...item, __idx: idx }));
+                renderHistoryList(allHistoryItems);
             } catch (e) {
                 console.error("Could not load history:", e);
             }
         }
+
+        // Live-filter Recent Searches as the user types
+        document.getElementById("history-search")?.addEventListener("input", (e) => {
+            const q = e.target.value.trim().toLowerCase();
+            if (!q) { renderHistoryList(allHistoryItems); return; }
+            const filtered = allHistoryItems.filter(item =>
+                (item.commodity || "").toLowerCase().includes(q) ||
+                (item.timestamp || "").toLowerCase().includes(q)
+            );
+            renderHistoryList(filtered);
+        });
 
         function escapeHtml(value) {
             return String(value).replace(/[&<>"']/g, char => ({
@@ -808,20 +1578,25 @@
             }[char]));
         }
 
+        document.getElementById("download-pdf").onclick = () => {
+            window.print();
+        };
+
         document.getElementById("copy-report").onclick = async () => {
             if (!lastRecommendation) return;
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
             try {
                 await navigator.clipboard.writeText(lastRecommendation);
                 const btn = document.getElementById("copy-report");
-                
-                const lang = document.getElementById('lang-select').value;
+
                 btn.innerText = lang === 'Hindi' ? '✓ कॉपी किया गया!' : (lang === 'Marathi' ? '✓ कॉपी केले!' : '✓ Copied!');
                 
                 setTimeout(() => {
                     btn.innerText = i18n[lang]?.copy_btn || i18n.English.copy_btn;
                 }, 1600);
             } catch(e) {
-                alert("Could not copy automatically.");
+                showToast(dict.copy_failed || "Could not copy automatically. Please select and copy the text manually.", "error");
             }
         };
 
@@ -844,20 +1619,25 @@
                         el.value = id === "commodityKey" ? (i18n[lang][value] || value) : value;
                     }
                 });
-                
+
                 document.getElementById("advanced-details").classList.remove("hidden");
                 document.getElementById("advanced-chevron").classList.add("rotate-180");
                 document.querySelectorAll(".quick-preset").forEach(b=>b.classList.remove("ring-2","ring-brand-400","bg-brand-50","dark:bg-brand-950/30"));
                 button.classList.add("ring-2","ring-brand-400","bg-brand-50","dark:bg-brand-950/30");
                 document.getElementById("commodity").scrollIntoView({behavior:"smooth",block:"center"});
+
+                // Presets can populate temp/humidity outside valid ranges in
+                // theory; keep the summary banner in sync either way.
+                document.getElementById('temp').dispatchEvent(new Event('input'));
+                document.getElementById('humidity').dispatchEvent(new Event('input'));
             };
         });
 
         // --- GENERATE LOGIC ---
-        document.getElementById('btn-generate').onclick = async () => {
-            const payload = {
+        function buildPayload(commodityOverride) {
+            return {
                 language: document.getElementById('lang-select').value,
-                commodity: document.getElementById('commodity').value,
+                commodity: commodityOverride ?? document.getElementById('commodity').value,
                 food_type: document.getElementById('food_type').value,
                 moisture: document.getElementById('moisture').value || "Not provided",
                 fat: document.getElementById('fat').value || "Not provided",
@@ -869,59 +1649,303 @@
                 respiration: document.getElementById('respiration').value,
                 transport: document.getElementById('transport').value,
                 budget: document.getElementById('budget').value,
-                extra_notes: document.getElementById('extra_notes').value || "None"
+                extra_notes: document.getElementById('extra_notes').value || "None",
+                value_per_unit: document.getElementById('value_per_unit').value || null
             };
+        }
 
-            const lang = document.getElementById('lang-select').value;
-            if(!payload.commodity) {
-                return alert(lang === "Hindi" ? "कृपया भोजन का नाम दर्ज करें।" : (lang === "Marathi" ? "कृपया अन्नाचे नाव प्रविष्ट करा." : "Please specify the food you are packaging."));
-            }
-
-            document.getElementById('loading-msg').classList.remove('hidden');
-            document.getElementById('btn-generate').classList.add('hidden');
-            document.getElementById('result-section').classList.add('hidden');
-
+        async function callGenerate(payload) {
             const res = await fetch('/api/generate', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
+            return { ok: res.ok, data };
+        }
 
-            document.getElementById('loading-msg').classList.add('hidden');
-            document.getElementById('btn-generate').classList.remove('hidden');
+        function renderCompareCard(prefix, commodityName, data, winners = {}) {
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            document.getElementById(`compare-${prefix}-name`).innerText = commodityName || "—";
+            const roi = data && data.roi_data;
+            const rows = [
+                ["material", dict.compare_material || "Recommended material", roi?.recommended_material],
+                ["structure", dict.compare_structure || "Structure", roi?.recommended_structure],
+                ["cost", dict.compare_cost || "Cost/unit", roi?.recommended_cost_per_unit != null ? `₹${roi.recommended_cost_per_unit}` : null],
+                ["shelf", dict.compare_shelf || "Shelf life", roi?.recommended_shelf_life_days != null ? `${roi.recommended_shelf_life_days} ${dict.roi_days_shelf || "days"}` : null],
+                ["confidence", dict.compare_confidence || "Confidence", roi?.confidence ? (dict["confidence_" + roi.confidence.confidence_level] || roi.confidence.confidence_level) : null],
+            ];
+            document.getElementById(`compare-${prefix}-body`).innerHTML = rows
+                .filter(([, , value]) => value)
+                .map(([key, label, value]) => {
+                    const isWinner = winners[key] === prefix;
+                    const valueClass = isWinner
+                        ? "font-black text-right text-emerald-600 dark:text-emerald-400"
+                        : "font-bold text-right";
+                    return `
+                    <div class="flex justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <span class="text-slate-500">${escapeHtml(label)}</span>
+                        <span class="${valueClass}">${escapeHtml(String(value))}${isWinner ? " 🏆" : ""}</span>
+                    </div>
+                `;
+                }).join("");
+        }
 
-            if(res.ok) {
-                const sidePresets = document.getElementById('side-presets');
-                const mainInput = document.getElementById('main-input-area');
-                if(sidePresets && mainInput) {
-                    sidePresets.classList.add('hidden');
-                    mainInput.classList.remove('lg:col-span-2');
-                    mainInput.classList.add('lg:col-span-3');
-                }
-                
-                document.getElementById('input-stage').classList.add('hidden');
+        // Figures out which side "wins" on cost (cheaper) and shelf life
+        // (longer) so the compare view highlights the better option per row
+        // instead of leaving the reader to compare two static tables.
+        function computeCompareWinners(roiA, roiB) {
+            const winners = {};
+            const costA = roiA?.recommended_cost_per_unit, costB = roiB?.recommended_cost_per_unit;
+            if (costA != null && costB != null && costA !== costB) {
+                winners.cost = costA < costB ? 'a' : 'b';
+            }
+            const shelfA = roiA?.recommended_shelf_life_days, shelfB = roiB?.recommended_shelf_life_days;
+            if (shelfA != null && shelfB != null && shelfA !== shelfB) {
+                winners.shelf = shelfA > shelfB ? 'a' : 'b';
+            }
+            return winners;
+        }
 
-                const resultBox = document.getElementById('result-section');
-                resultBox.classList.remove('hidden');
-                
-                lastRecommendation = cleanAIText(data.recommendation);
-                const split = extractTechnicalSection(lastRecommendation);
-                document.getElementById("result-content").innerHTML = marked.parse(split.main);
-                document.getElementById("technical-content").innerHTML = marked.parse(split.technical || "No separate technical details were provided.");
-                
-                populateResultMeta();
-                loadSearchHistory();
-                
-                resultBox.classList.remove('animate-fade-in-up');
-                void resultBox.offsetWidth;
-                resultBox.classList.add('animate-fade-in-up');
-                
-                setTimeout(() => window.scrollTo({top: 0, behavior: "smooth"}), 100);
-            } else {
-                alert(lang === "Hindi" ? "कुछ गलत हो गया। कृपया पुनः प्रयास करें।" : (lang === "Marathi" ? "काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा." : "We could not generate the recommendation right now. Please try again."));
+        function renderComparePair(nameA, dataA, nameB, dataB) {
+            const winners = computeCompareWinners(dataA?.roi_data, dataB?.roi_data);
+            renderCompareCard('a', nameA, dataA, winners);
+            renderCompareCard('b', nameB, dataB, winners);
+        }
+
+        // --- TOAST NOTIFICATIONS (replaces alert() popups) ---
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const colors = {
+                info: "bg-slate-900 dark:bg-slate-700 text-white",
+                success: "bg-emerald-600 text-white",
+                error: "bg-red-600 text-white",
+                warning: "bg-amber-500 text-white"
+            };
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-2xl text-sm font-bold max-w-xs transition-all duration-300 opacity-0 translate-y-2 ${colors[type] || colors.info}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.remove('opacity-0', 'translate-y-2');
+            });
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        function cacheLastResult(payload, data) {
+            try {
+                localStorage.setItem("packsense-last-result", JSON.stringify({ payload, data, savedAt: Date.now() }));
+            } catch (e) { /* storage full or unavailable — non-fatal */ }
+        }
+
+        function loadCachedResult() {
+            try {
+                const raw = localStorage.getItem("packsense-last-result");
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function collapseInputStage() {
+            const sidePresets = document.getElementById('side-presets');
+            const mainInput = document.getElementById('main-input-area');
+            const inputStage = document.getElementById('input-stage');
+            if(sidePresets && mainInput) {
+                sidePresets.classList.add('hidden');
+                mainInput.classList.remove('lg:col-span-2');
+                mainInput.classList.add('lg:col-span-3');
+            }
+            // Crossfade instead of an instant hide/show swap
+            inputStage.style.transition = 'opacity 0.25s ease';
+            inputStage.style.opacity = '0';
+            setTimeout(() => {
+                inputStage.classList.add('hidden');
+                inputStage.style.opacity = '';
+                inputStage.style.transition = '';
+            }, 250);
+        }
+
+        // Shared renderer used by generate / history / session-restore, so a
+        // refresh mid-session can show the same view without re-calling the AI.
+        function showResultFromData(commodityName, data) {
+            collapseInputStage();
+            const resultBox = document.getElementById('result-section');
+            resultBox.style.opacity = '0';
+            resultBox.classList.remove('hidden');
+            document.getElementById('result-mini-nav').classList.remove('hidden');
+
+            lastRecommendation = cleanAIText(data.recommendation || "");
+            const split = extractTechnicalSection(lastRecommendation);
+            document.getElementById("result-content").innerHTML = marked.parse(split.main);
+            document.getElementById("technical-content").innerHTML = marked.parse(split.technical || "No separate technical details were provided.");
+
+            populateRoiCard(data.roi_data || null);
+            populateTraceCard(data.trace || null);
+
+            const food = document.getElementById("result-food");
+            if (food) food.innerText = commodityName || "—";
+            populateResultMeta();
+
+            requestAnimationFrame(() => {
+                resultBox.style.transition = 'opacity 0.4s ease';
+                resultBox.style.opacity = '1';
+            });
+        }
+
+        // Restore whatever the user was last looking at (result view) after a
+        // page refresh, using the same cache used for offline fallback.
+        function restoreLastSessionView() {
+            const cached = loadCachedResult();
+            if (!cached || !cached.data) return;
+            showResultFromData(cached.payload?.commodity, cached.data);
+        }
+
+        function showGenerateError(message) {
+            const box = document.getElementById('generate-error');
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            document.getElementById('generate-error-text').innerText = message || dict.error_generic;
+            document.getElementById('generate-error-retry').innerText = dict.error_retry;
+            box.classList.remove('hidden');
+            showToast(message || dict.error_generic, "error");
+        }
+        function hideGenerateError() {
+            document.getElementById('generate-error').classList.add('hidden');
+        }
+
+        document.getElementById('generate-error-retry').onclick = () => {
+            hideGenerateError();
+            if (lastFailedRun) {
+                runGenerate(lastFailedRun.compareMode, lastFailedRun.payload, lastFailedRun.commodityB);
             }
         };
-        
+
+        function setGeneratingState(isGenerating, compareMode) {
+            const btn = document.getElementById('btn-generate');
+            btn.disabled = isGenerating; // disable (not hide) so double-clicks can't fire twice
+            document.getElementById(compareMode ? 'skeleton-section-compare' : 'skeleton-section').classList.toggle('hidden', !isGenerating);
+            if (!isGenerating) {
+                document.getElementById('skeleton-section').classList.add('hidden');
+                document.getElementById('skeleton-section-compare').classList.add('hidden');
+            }
+        }
+
+        async function runGenerate(compareMode, payload, commodityB) {
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+
+            hideGenerateError();
+            setGeneratingState(true, compareMode);
+            document.getElementById('result-section').classList.add('hidden');
+            document.getElementById('result-mini-nav').classList.add('hidden');
+            document.getElementById('compare-result').classList.add('hidden');
+            document.getElementById('offline-banner').classList.add('hidden');
+
+            try {
+                if (compareMode) {
+                    const [resultA, resultB] = await Promise.all([
+                        callGenerate(payload),
+                        callGenerate(buildPayload(commodityB))
+                    ]);
+
+                    setGeneratingState(false, compareMode);
+
+                    if (!resultA.ok || !resultB.ok) {
+                        lastFailedRun = { compareMode, payload, commodityB };
+                        showGenerateError(dict.error_generic);
+                        return;
+                    }
+
+                    collapseInputStage();
+                    renderComparePair(payload.commodity, resultA.data, commodityB, resultB.data);
+                    document.getElementById('compare-result').classList.remove('hidden');
+                    loadSearchHistory();
+                    loadExpiringSoon();
+                    showToast(dict.toast_compare_ready || "Comparison ready!", "success");
+                    setTimeout(() => window.scrollTo({top: 0, behavior: "smooth"}), 260);
+                    return;
+                }
+
+                const { ok, data } = await callGenerate(payload);
+
+                setGeneratingState(false, compareMode);
+
+                if(ok) {
+                    showResultFromData(payload.commodity, data);
+                    loadSearchHistory();
+                    loadExpiringSoon();
+                    cacheLastResult(payload, data);
+                    showToast(dict.toast_plan_ready || "Your packaging plan is ready!", "success");
+
+                    setTimeout(() => window.scrollTo({top: 0, behavior: "smooth"}), 260);
+                } else {
+                    lastFailedRun = { compareMode, payload, commodityB };
+                    showGenerateError(dict.error_generic);
+                }
+            } catch (networkError) {
+                // Network dropped mid-request: fall back to the last cached
+                // recommendation instead of leaving the user with nothing.
+                setGeneratingState(false, compareMode);
+
+                const cached = loadCachedResult();
+                if (!cached) {
+                    lastFailedRun = { compareMode, payload, commodityB };
+                    showGenerateError(dict.error_generic);
+                    return;
+                }
+
+                collapseInputStage();
+                document.getElementById('result-mini-nav').classList.remove('hidden');
+                document.getElementById('offline-banner').classList.remove('hidden');
+
+                showResultFromData(cached.payload?.commodity, cached.data);
+                setTimeout(() => window.scrollTo({top: 0, behavior: "smooth"}), 260);
+            }
+        }
+
+        document.getElementById('btn-generate').onclick = async () => {
+            if (document.getElementById('btn-generate').disabled) return;
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            const compareMode = document.getElementById('compare-toggle').checked;
+            const commodityB = document.getElementById('commodity-b').value;
+            const payload = buildPayload();
+
+            if(!payload.commodity) {
+                showToast(dict.toast_need_food || "Please specify the food you are packaging.", "warning");
+                document.getElementById('commodity').focus();
+                return;
+            }
+            if (compareMode && !commodityB) {
+                showToast(dict.toast_need_second_food || "Please enter a second food to compare.", "warning");
+                document.getElementById('commodity-b').focus();
+                return;
+            }
+            if (hasInvalidFields()) {
+                updateValidationSummary();
+                showToast(dict.toast_fix_fields || "Please fix the highlighted fields before generating.", "warning");
+                return;
+            }
+
+            runGenerate(compareMode, payload, commodityB);
+        };
+
+        // --- KEYBOARD SHORTCUT: Ctrl/Cmd+Enter to generate ---
+        document.addEventListener('keydown', (e) => {
+            const isEnterCombo = (e.key === 'Enter') && (e.ctrlKey || e.metaKey);
+            if (!isEnterCombo) return;
+            const inputStageVisible = !document.getElementById('input-stage').classList.contains('hidden');
+            if (inputStageVisible) {
+                e.preventDefault();
+                document.getElementById('btn-generate').click();
+            }
+        });
+
         document.getElementById("new-analysis-btn")?.addEventListener("click", () => {
             const sidePresets = document.getElementById('side-presets');
             const mainInput = document.getElementById('main-input-area');
@@ -932,14 +1956,37 @@
             }
             
             document.getElementById("result-section")?.classList.add("hidden");
-            document.getElementById("input-stage")?.classList.remove("hidden");
+            document.getElementById("result-mini-nav")?.classList.add("hidden");
+            document.getElementById("compare-result")?.classList.add("hidden");
+            document.getElementById("offline-banner")?.classList.add("hidden");
+            const inputStage = document.getElementById("input-stage");
+            inputStage.classList.remove("hidden");
+            inputStage.style.opacity = '1';
             
-            // Un-hide the generate button just in case we hit "New Analysis" while generating
-            document.getElementById('btn-generate').classList.remove('hidden');
+            document.getElementById('btn-generate').disabled = false;
             window.scrollTo({top: 0, behavior: "smooth"});
         });
 
-        window.addEventListener("load", loadSearchHistory);
+        // --- MINI-NAV ACTIVE-LINK HIGHLIGHTING ---
+        (function setupMiniNavScrollSpy() {
+            const nav = document.getElementById('result-mini-nav');
+            if (!nav) return;
+            const links = Array.from(nav.querySelectorAll('.mini-nav-link'));
+            const targets = links.map(l => document.querySelector(l.getAttribute('href'))).filter(Boolean);
+            window.addEventListener('scroll', () => {
+                if (nav.classList.contains('hidden')) return;
+                let activeIdx = 0;
+                targets.forEach((t, i) => {
+                    if (t.getBoundingClientRect().top - 140 <= 0) activeIdx = i;
+                });
+                links.forEach((l, i) => l.classList.toggle('active', i === activeIdx));
+            }, { passive: true });
+        })();
+
+        window.addEventListener("load", () => {
+            loadSearchHistory();
+            loadExpiringSoon();
+        });
     </script>
 </body>
 </html>
