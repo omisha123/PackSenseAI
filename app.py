@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, send_file
 import database as db
 import materials
+import spec_sheet
 from google import genai
 import os
 import re
@@ -62,20 +63,24 @@ OPTIONAL_FIELD_KEYS = ["moisture", "fat", "ph", "extra_notes"]
 EMPTY_MARKERS = {"", "not provided", "none", "not sure"}
 
 CONFIDENCE_COPY = {
+    # NOTE: the frontend already prepends the level label itself (e.g. shows
+    # "Medium confidence — " before this text) -- these strings previously
+    # repeated that label, producing "Medium confidence — Medium confidence —
+    # ...". Prefix removed here; only the actionable note remains.
     "English": {
-        "high": "High confidence — enough details were provided for a sharper estimate.",
-        "medium": "Medium confidence — a rough estimate; fill in moisture, fat or pH for a sharper answer.",
-        "low": "Rough estimate — add moisture, fat, pH or notes above for a sharper answer.",
+        "high": "Enough details were provided for a sharper estimate.",
+        "medium": "This is a rough estimate; fill in moisture, fat or pH for a sharper answer.",
+        "low": "Add moisture, fat, pH or notes above for a sharper answer.",
     },
     "Hindi": {
-        "high": "उच्च विश्वसनीयता — बेहतर अनुमान के लिए पर्याप्त जानकारी दी गई है।",
-        "medium": "मध्यम विश्वसनीयता — यह एक मोटा अनुमान है; बेहतर उत्तर के लिए नमी, वसा या pH भरें।",
-        "low": "मोटा अनुमान — बेहतर उत्तर के लिए ऊपर नमी, वसा, pH या टिप्पणी जोड़ें।",
+        "high": "बेहतर अनुमान के लिए पर्याप्त जानकारी दी गई है।",
+        "medium": "यह एक मोटा अनुमान है; बेहतर उत्तर के लिए नमी, वसा या pH भरें।",
+        "low": "बेहतर उत्तर के लिए ऊपर नमी, वसा, pH या टिप्पणी जोड़ें।",
     },
     "Marathi": {
-        "high": "उच्च विश्वासार्हता — अधिक अचूक अंदाजासाठी पुरेशी माहिती दिली आहे.",
-        "medium": "मध्यम विश्वासार्हता — हा एक ढोबळ अंदाज आहे; अधिक चांगल्या उत्तरासाठी आर्द्रता, चरबी किंवा pH भरा.",
-        "low": "ढोबळ अंदाज — अधिक चांगल्या उत्तरासाठी वर आर्द्रता, चरबी, pH किंवा टीप जोडा.",
+        "high": "अधिक अचूक अंदाजासाठी पुरेशी माहिती दिली आहे.",
+        "medium": "हा एक ढोबळ अंदाज आहे; अधिक चांगल्या उत्तरासाठी आर्द्रता, चरबी किंवा pH भरा.",
+        "low": "अधिक चांगल्या उत्तरासाठी वर आर्द्रता, चरबी, pH किंवा टीप जोडा.",
     },
 }
 
@@ -244,8 +249,14 @@ def generate():
     if not api_key:
         return jsonify({"error": "Server configuration error: Gemini API Key is missing!"}), 500
 
+    # --- CHANGE 1 OF 2: pass moisture/fat/budget so materials.py can actually
+    # score candidates instead of only keyword-matching on food_type. ---
     relevant_materials = materials.get_relevant_materials(
-        data.get('food_type', ''), data.get('respiration', '')
+        data.get('food_type', ''),
+        data.get('respiration', ''),
+        moisture=data.get('moisture'),
+        fat=data.get('fat'),
+        budget=data.get('budget', ''),
     )
     materials_context = materials.format_materials_context(relevant_materials)
 
@@ -328,9 +339,14 @@ Give one important practical warning, in plain language.
 
 {h['technical']}
 This is the ONLY section where acronyms, exact numbers and engineering terms belong. Put OTR, WVTR,
-thickness, mechanical strength, sealability temperature and MAP gas composition here, each with a one-line
-plain-language translation in brackets so a non-expert can still follow along (e.g. "WVTR: 10-20 g/m2/day
-(a measure of how much moisture can pass through — lower is drier)").
+thickness, mechanical strength and sealability temperature here, each with a one-line plain-language
+translation in brackets so a non-expert can still follow along (e.g. "WVTR: 10-20 g/m2/day (a measure of
+how much moisture can pass through — lower is drier)").
+Do NOT state MAP gas percentages (O2/CO2/N2 numbers) in this section's text. The exact MAP percentages are
+shown separately in a dedicated MAP card elsewhere on the page, generated from the map_o2_percent/
+map_co2_percent/map_n2_percent values you give at the end -- restating different numbers here would
+contradict that card. If MAP is relevant, just write one sentence noting that a modified-atmosphere gas
+flush is recommended and to see the MAP card above for the exact mix; do not give your own percentages here.
 
 End with a short "Why this choice?" sentence that a non-expert can understand.
 
@@ -393,6 +409,11 @@ on the food type and conditions given; state clearly in the main text above if t
                 cleaned_text, extra_data = extract_roi_block(raw_text)
                 extra_data = attach_waste_estimate(extra_data)
                 if extra_data is not None:
+                    # --- CHANGE 2 OF 2: validate/clamp Gemini's numbers against
+                    # the materials database before anything else touches them. ---
+                    extra_data = materials.validate_recommendation(
+                        extra_data, relevant_materials, food_type=data.get('food_type', '')
+                    )
                     extra_data["confidence"] = compute_confidence(data)
                     break_even = compute_break_even(extra_data, data.get("value_per_unit"))
                     if break_even:
@@ -482,6 +503,36 @@ def upcoming_expiry():
 
     upcoming.sort(key=lambda item: item["days_left"])
     return jsonify(upcoming)
+
+
+@app.route('/api/spec-sheet', methods=['POST'])
+def spec_sheet_route():
+    """
+    Builds a formal, supplier-facing PDF spec sheet from a recommendation the
+    user already generated. No new Gemini call here -- the frontend sends
+    back the same form_data, roi_data (extra_data) and trace it already has
+    from the /api/generate response, and this just formats it as a document.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    payload = request.json or {}
+    form_data = payload.get("form_data") or {}
+    extra_data = payload.get("roi_data") or {}
+    trace_data = payload.get("trace") or {}
+
+    try:
+        pdf_buffer = spec_sheet.build_spec_sheet_pdf(form_data, extra_data, trace_data)
+    except Exception as e:
+        return jsonify({"error": "Could not generate spec sheet.", "details": str(e)}), 500
+
+    filename = f"packaging-spec-{trace_data.get('batch_no', 'draft')}.pdf"
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 if __name__ == '__main__':

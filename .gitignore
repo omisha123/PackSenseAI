@@ -1,0 +1,15 @@
+# macOS metadata
+.DS_Store
+
+# Python bytecode & cache
+__pycache__/
+*.pyc
+
+# Local SQLite databases
+*.db
+*.sqlite3
+
+# Virtual environments (just in case)
+venv/
+.venv/
+env/
