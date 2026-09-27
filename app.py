@@ -635,6 +635,115 @@ and put a short explanation in "note".
     })
 
 
+@app.route('/api/parse-voice', methods=['POST'])
+def parse_voice():
+    """Convert one natural-language voice transcript into the existing form fields."""
+    if 'username' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    data = request.json or {}
+    transcript = str(data.get('transcript', '')).strip()
+    language = data.get('language', 'English')
+
+    if not transcript:
+        return jsonify({"error": "No voice transcript received."}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "Server configuration error: Gemini API Key is missing!"}), 500
+
+    prompt = f"""
+You are a form-filling assistant for PackSense, a food-packaging recommendation website.
+
+The user spoke one natural-language request. Extract ONLY information that is clearly stated or
+strongly implied. Do not invent values. The user may speak English, Hindi, Marathi, Punjabi, or a
+mix of these languages. Understand the meaning and return field values in the exact formats below.
+
+User's selected website language: {language}
+Voice transcript:
+{transcript}
+
+Return ONLY one fenced JSON block with exactly these keys:
+{{
+  "language": <one of "English", "Hindi", "Marathi", "Punjabi" or null if not clear>,
+  "commodity": <food/product name as a short string or null>,
+  "food_type": <one of "Fresh produce", "Dry / low-moisture food", "Snack / fried food", "Dairy", "Meat / seafood", "Processed / ready-to-eat", "Other", or null>,
+  "moisture": <number as a string or null>,
+  "fat": <number as a string or null>,
+  "ph": <number as a string or null>,
+  "storage_type": <one of "Room temperature", "Refrigerated", "Frozen", "Warehouse", "Cold chain", or null>,
+  "temp": <number as a string or null>,
+  "humidity": <number as a string or null>,
+  "shelf_life": <one of "3", "7", "14", "30", "60", "90" or null>,
+  "respiration": <one of "Not sure", "Low", "Medium", "High" or null>,
+  "transport": <one of "Road / Truck", "Local delivery", "Sea Freight", "Air Freight" or null>,
+  "budget": <one of "Low / Economy", "Standard", "Premium / Export" or null>,
+  "extra_notes": <short string containing useful requirements that do not belong in another field, or null>
+}}
+
+Rules:
+- If the user says "cheap", "low cost", "budget", or similar, use "Low / Economy".
+- If the user says "normal" or "medium budget", use "Standard".
+- If the user says "premium", "export", or similar, use "Premium / Export".
+- Convert common spoken temperature, moisture, fat and pH values to simple numbers without units.
+- If the user gives a shelf life such as "one week", use "7"; "two weeks" -> "14"; "one month" -> "30"; "two months" -> "60"; "three months" -> "90".
+- If the user mentions refrigerated/chilled/cold storage, use "Refrigerated". Frozen -> "Frozen". Cold chain -> "Cold chain".
+- If the user mentions truck/road, use "Road / Truck". Local delivery -> "Local delivery". Ship/sea -> "Sea Freight". Flight/air -> "Air Freight".
+- If a value is not mentioned, return null. Do not fill missing fields with guesses.
+- Keep the food name concise. If the user says "mangoes", return "Mango".
+- Put preferences such as "eco-friendly", "recyclable", "strong", "cheap", or other packaging wishes in extra_notes unless they directly map to budget.
+"""
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(model=MODELS[0], contents=prompt)
+        raw_text = response.text or ""
+    except Exception as e:
+        return jsonify({
+            "error": "Could not understand the voice request right now. Please try again.",
+            "details": str(e)
+        }), 503
+
+    match = re.search(r"```json\s*(\{.*?\})\s*```", raw_text, re.DOTALL)
+    if not match:
+        match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+    if not match:
+        return jsonify({"error": "The voice response could not be parsed. Please try again."}), 502
+
+    try:
+        parsed = json.loads(match.group(1))
+    except Exception:
+        return jsonify({"error": "The voice response could not be parsed. Please try again."}), 502
+
+    allowed = {
+        "language": {"English", "Hindi", "Marathi", "Punjabi"},
+        "food_type": set(VALID_FOOD_TYPES),
+        "storage_type": {"Room temperature", "Refrigerated", "Frozen", "Warehouse", "Cold chain"},
+        "shelf_life": {"3", "7", "14", "30", "60", "90"},
+        "respiration": {"Not sure", "Low", "Medium", "High"},
+        "transport": {"Road / Truck", "Local delivery", "Sea Freight", "Air Freight"},
+        "budget": {"Low / Economy", "Standard", "Premium / Export"},
+    }
+
+    result = {}
+    for key in ["language", "commodity", "food_type", "moisture", "fat", "ph", "storage_type", "temp", "humidity", "shelf_life", "respiration", "transport", "budget", "extra_notes"]:
+        value = parsed.get(key)
+        if value is None or str(value).strip() == "":
+            result[key] = None
+            continue
+        if key in allowed and value not in allowed[key]:
+            result[key] = None
+            continue
+        if key in {"moisture", "fat", "ph", "temp", "humidity"}:
+            try:
+                result[key] = str(float(str(value).replace('%', '').replace('°C', '').replace('°', '').strip()))
+            except (TypeError, ValueError):
+                result[key] = None
+        else:
+            result[key] = str(value).strip()
+
+    return jsonify(result)
+
 @app.route('/api/spec-sheet', methods=['POST'])
 def spec_sheet_route():
     """

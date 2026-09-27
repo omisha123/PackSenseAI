@@ -36,7 +36,7 @@
             margin: 0; min-height: 100vh; display: flex; flex-direction: column;
         }
         .theme-overlay { position: fixed; inset: 0; z-index: -1; transition: background-color 0.5s ease; }
-        .dark .theme-overlay { background-color: rgba(15, 23, 42, 0.88); }
+        .dark .theme-overlay { background-color: rgba(15, 23, 42, 0.70); }
         html:not(.dark) .theme-overlay { background-color: rgba(248, 250, 252, 0.85); }
 
         .glass {
@@ -129,9 +129,49 @@
             #pitch-mode-only { display: block !important; }
             #result-section .lg\:col-span-2, #result-section .space-y-5 { page-break-inside: avoid; }
         }
+
+        /* --- Dashboard workspace + startup loader --- */
+        #startup-loader {
+            position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+            background: radial-gradient(circle at 50% 35%, rgba(16,185,129,.18), transparent 35%), #07131a;
+            transition: opacity .55s ease, visibility .55s ease;
+        }
+        #startup-loader.loader-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .startup-orb { animation: loaderFloat 2.4s ease-in-out infinite; }
+        .startup-ring { animation: loaderSpin 1.2s linear infinite; }
+        @keyframes loaderSpin { to { transform: rotate(360deg); } }
+        @keyframes loaderFloat { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-7px) scale(1.03); } }
+        .workspace-card { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+        .workspace-card:hover { transform: translateY(-3px); box-shadow: 0 18px 45px rgba(15,23,42,.16); }
+        .dark .workspace-card:hover { box-shadow: 0 18px 45px rgba(0,0,0,.28); }
+        .workspace-tab { transition: all .2s ease; }
+        .workspace-tab.active { background: linear-gradient(135deg,#10b981,#059669); color: white; box-shadow: 0 8px 20px rgba(16,185,129,.25); }
+        .workspace-panel { animation: workspaceIn .35s ease both; }
+        @keyframes workspaceIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .workspace-scroll { max-height: 430px; overflow-y: auto; padding-right: 4px; }
+        .workspace-item { transition: all .2s ease; }
+        .workspace-item:hover { transform: translateX(3px); }
+        .shortcut-glow { box-shadow: 0 0 0 1px rgba(16,185,129,.12), 0 12px 35px rgba(16,185,129,.08); }
+        @media (max-width: 640px) { .workspace-scroll { max-height: 360px; } }
     </style>
 </head>
 <body class="text-slate-800 dark:text-slate-100 antialiased transition-colors duration-500">
+    <!-- Startup loading screen -->
+    <div id="startup-loader" aria-label="Loading PackSense AI">
+        <div class="text-center px-6">
+            <div class="startup-orb relative mx-auto w-24 h-24 mb-6">
+                <div class="startup-ring absolute inset-0 rounded-full border-4 border-emerald-400/20 border-t-emerald-400"></div>
+                <div class="absolute inset-3 rounded-[2rem] bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-4xl shadow-2xl">🥭</div>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight">PackSense AI</h2>
+            <p class="text-emerald-200/80 text-sm mt-2 font-medium">Smart packaging, made simple</p>
+            <div class="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Preparing your workspace...
+            </div>
+        </div>
+    </div>
+
     <div class="theme-overlay"></div>
 
     <!-- Toast notifications (replaces alert() popups) -->
@@ -146,8 +186,11 @@
                     <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" data-key="nav_subtitle">Smart packaging, made simple</p>
                 </div>
             </div>
-
+            
             <div class="flex items-center gap-3 md:gap-5">
+                <button id="top-home-btn" type="button" class="hidden px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold shadow-sm hover:shadow-md transition-all">
+    🏠 Home
+</button>
                 <select id="lang-select" class="input-premium !w-auto !py-2 !pl-3 !pr-8 cursor-pointer text-sm font-bold shadow-sm hidden sm:block">
                     <option value="English">🇬🇧 English</option>
                     <option value="Hindi">🇮🇳 Hindi</option>
@@ -434,19 +477,71 @@
                             </div>
                             
                             <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-                                <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-500 mb-3" data-key="expiring_title">Expiring Soon</h3>
-                                <div id="expiring-list" class="space-y-2">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-500">Workspace</h3>
+                                    <span class="text-xs text-slate-400">Organize & review</span>
                                 </div>
-                            </div>
-
-                            <div class="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-                                <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-500 mb-3" data-key="history_title">Recent Searches</h3>
-                                <input id="history-search" type="text" class="input-premium !py-2 !text-xs mb-3" data-placeholder-key="history_search_placeholder" placeholder="Search past searches...">
-                                <div id="history-list" class="space-y-2">
+                                <div class="space-y-2.5">
+                                    <button type="button" id="open-items-side" class="workspace-card w-full text-left p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-950/30 hover:border-brand-400 transition-all">
+                                        <div class="flex items-center gap-3">
+                                            <span class="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-lg">🗂️</span>
+                                            <div class="min-w-0 flex-1"><div class="font-extrabold text-sm">My Items</div><div class="text-[11px] text-slate-500">Browse your recent packaging plans</div></div>
+                                            <span id="history-count-side" class="text-xs font-black px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800">0</span>
+                                        </div>
+                                    </button>
+                                    <button type="button" id="open-expiry-side" class="workspace-card w-full text-left p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-950/30 hover:border-amber-400 transition-all">
+                                        <div class="flex items-center gap-3">
+                                            <span class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-lg">⏰</span>
+                                            <div class="min-w-0 flex-1"><div class="font-extrabold text-sm">Expiry Tracker</div><div class="text-[11px] text-slate-500">Keep an eye on upcoming expiry</div></div>
+                                            <span id="expiry-count-side" class="text-xs font-black px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">0</span>
+                                        </div>
+                                    </button>
                                 </div>
                             </div>
                         </aside>
                     </div>
+
+                    <!-- Separate workspace for long lists -->
+                    <section id="workspace-section" class="hidden mt-8 scroll-mt-28">
+                        <div class="rounded-[2rem] border border-slate-200 dark:border-slate-700 bg-white/75 dark:bg-slate-900/70 shadow-xl overflow-hidden">
+                            <div class="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-700">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div>
+                                        <div class="text-xs font-extrabold uppercase tracking-widest text-brand-600 dark:text-brand-400">YOUR WORKSPACE</div>
+                                        <h3 class="text-2xl font-black mt-1">Manage your packaging activity</h3>
+                                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Your lists are kept here so the main dashboard stays clean.</p>
+                                    </div>
+                                   <div class="flex gap-2">
+    <button type="button" id="workspace-home" class="px-4 py-2 rounded-xl border border-brand-300 dark:border-brand-700 font-bold text-sm hover:bg-brand-50 dark:hover:bg-brand-900/20 transition">⌂ Home</button>
+    <button type="button" id="close-workspace" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition">✕ Close</button>
+</div>
+                                </div>
+                                <div class="mt-5 grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100/80 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
+                                    <button type="button" class="workspace-tab active px-4 py-3 rounded-xl text-sm font-black" data-workspace-tab="items">🗂️ My Items <span id="history-count-tab" class="ml-1 opacity-70">0</span></button>
+                                    <button type="button" class="workspace-tab px-4 py-3 rounded-xl text-sm font-black text-slate-600 dark:text-slate-300" data-workspace-tab="expiry">⏰ Expiry Tracker <span id="expiry-count-tab" class="ml-1 opacity-70">0</span></button>
+                                </div>
+                            </div>
+
+                            <div id="workspace-items-panel" class="workspace-panel p-5 sm:p-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                                    <div><h4 class="text-lg font-black">Recent packaging plans</h4><p class="text-xs text-slate-500 dark:text-slate-400">Click any item to reopen its saved recommendation.</p></div>
+                                    <div class="relative sm:w-80">
+                                        <span class="absolute left-3 top-1/2 -translate-y-1/2">🔎</span>
+                                        <input id="history-search" type="text" class="input-premium !py-2.5 !pl-10" data-placeholder-key="history_search_placeholder" placeholder="Search past searches...">
+                                    </div>
+                                </div>
+                                <div id="history-list" class="workspace-scroll grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                            </div>
+
+                            <div id="workspace-expiry-panel" class="workspace-panel hidden p-5 sm:p-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                                    <div><h4 class="text-lg font-black">Upcoming expiry</h4><p class="text-xs text-slate-500 dark:text-slate-400">Batches from your existing expiry data that may need attention.</p></div>
+                                    <div class="px-4 py-2 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm font-black text-amber-700 dark:text-amber-300"><span id="expiry-highlight-count">0</span> items to review</div>
+                                </div>
+                                <div id="expiring-list" class="workspace-scroll grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+                            </div>
+                        </div>
+                    </section>
 
                     <div class="mt-12">
                         <div id="validation-summary" class="hidden mb-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 p-3 text-sm font-bold text-amber-700 dark:text-amber-300 text-center"></div>
@@ -1224,6 +1319,7 @@
                     document.getElementById('auth-section').classList.add('hidden');
                     document.getElementById('nav-auth-controls').classList.remove('hidden');
                     document.getElementById('nav-auth-controls').classList.add('flex');
+                    document.getElementById('top-home-btn').classList.remove('hidden');
                     document.getElementById('welcome-msg').innerText = `Hi, ${data.username}`;
                     enterApp();
                 } else {
@@ -1242,6 +1338,30 @@
             location.reload(); 
         };
 
+        document.getElementById('top-home-btn').onclick = () => {
+            const sidePresets = document.getElementById('side-presets');
+            const mainInput = document.getElementById('main-input-area');
+            const inputStage = document.getElementById('input-stage');
+
+            document.getElementById('workspace-section')?.classList.add('hidden');
+            document.getElementById('result-section')?.classList.add('hidden');
+            document.getElementById('result-mini-nav')?.classList.add('hidden');
+            document.getElementById('compare-result')?.classList.add('hidden');
+            document.getElementById('offline-banner')?.classList.add('hidden');
+
+            if(sidePresets && mainInput) {
+                sidePresets.classList.remove('hidden');
+                mainInput.classList.remove('lg:col-span-3');
+                mainInput.classList.add('lg:col-span-2');
+            }
+
+            if(inputStage) {
+                inputStage.classList.remove('hidden');
+                inputStage.style.opacity = '1';
+                inputStage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
+
         // Restore a logged-in session view on refresh via /api/whoami
         (async function tryRestoreSession() {
             try {
@@ -1252,6 +1372,7 @@
                     document.getElementById('auth-section').classList.add('hidden');
                     document.getElementById('nav-auth-controls').classList.remove('hidden');
                     document.getElementById('nav-auth-controls').classList.add('flex');
+                    document.getElementById('top-home-btn').classList.remove('hidden');
                     document.getElementById('welcome-msg').innerText = `Hi, ${data.username}`;
                     enterApp();
                 }
@@ -1519,6 +1640,10 @@
                 const response = await fetch("/api/upcoming-expiry");
                 if (!response.ok) return;
                 const items = await response.json();
+                document.getElementById('expiry-count') && (document.getElementById('expiry-count').textContent = items.length);
+                document.getElementById('expiry-count-side') && (document.getElementById('expiry-count-side').textContent = items.length);
+                document.getElementById('expiry-count-tab') && (document.getElementById('expiry-count-tab').textContent = items.length);
+                document.getElementById('expiry-highlight-count') && (document.getElementById('expiry-highlight-count').textContent = items.length);
                 const lang = document.getElementById('lang-select').value;
                 const dict = i18n[lang] || i18n.English;
 
@@ -1566,7 +1691,7 @@
             }
 
             historyPanel.innerHTML = items.map((item) => `
-                <button type="button" class="history-item w-full text-left p-3 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition border border-transparent hover:border-brand-200 dark:hover:border-brand-800" data-history-index="${item.__idx}">
+                <button type="button" class="history-item workspace-item w-full text-left p-4 rounded-2xl bg-white/60 dark:bg-slate-950/30 border border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-700 hover:shadow-lg transition" data-history-index="${item.__idx}">
                     <div class="font-bold text-sm">${escapeHtml(item.commodity || "Packaging analysis")}</div>
                     <div class="text-xs text-slate-500 mt-1">${escapeHtml(item.timestamp || "")}</div>
                 </button>
@@ -1590,6 +1715,9 @@
                 if (!response.ok) return;
                 const items = await response.json();
                 allHistoryItems = items.map((item, idx) => ({ ...item, __idx: idx }));
+                document.getElementById('history-count') && (document.getElementById('history-count').textContent = allHistoryItems.length);
+                document.getElementById('history-count-side') && (document.getElementById('history-count-side').textContent = allHistoryItems.length);
+                document.getElementById('history-count-tab') && (document.getElementById('history-count-tab').textContent = allHistoryItems.length);
                 renderHistoryList(allHistoryItems);
             } catch (e) {
                 console.error("Could not load history:", e);
@@ -1868,7 +1996,284 @@
             });
         })();
 
-        // --- GENERATE LOGIC ---
+
+// --- FLOATING VOICE FORM FILL ---
+document.addEventListener('DOMContentLoaded', () => {
+(function setupFloatingVoiceForm() {
+    const voiceWrap = document.getElementById('voice-assistant-wrap');
+    const voiceBtn = document.getElementById('floating-voice-btn');
+    const voiceIcon = document.getElementById('floating-voice-icon');
+    const voiceButtonText = voiceBtn?.querySelector('.voice-button-text');
+    const panel = document.getElementById('voice-assistant-panel');
+    const closeBtn = document.getElementById('voice-panel-close');
+    const status = document.getElementById('voice-assistant-status');
+    const transcriptBox = document.getElementById('voice-assistant-transcript');
+
+    if (!voiceWrap || !voiceBtn || !panel) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let listening = false;
+    let finalTranscript = '';
+
+    function isHomeInputVisible() {
+        const authSection = document.getElementById('auth-section');
+        const inputStage = document.getElementById('input-stage');
+        const appSection = document.getElementById('app-section');
+        const workspace = document.getElementById('workspace-section');
+        const resultSection = document.getElementById('result-section');
+        const compareResult = document.getElementById('compare-result');
+
+        return !!authSection && !!inputStage && !!appSection
+            && authSection.classList.contains('hidden')
+            && !appSection.classList.contains('hidden')
+            && !inputStage.classList.contains('hidden')
+            && (!workspace || workspace.classList.contains('hidden'))
+            && (!resultSection || resultSection.classList.contains('hidden'))
+            && (!compareResult || compareResult.classList.contains('hidden'));
+    }
+
+    function syncVoiceVisibility() {
+        const show = isHomeInputVisible();
+        if (!show && listening && recognition) {
+            try { recognition.stop(); } catch (e) {}
+        }
+        if (!show) {
+            panel.classList.add('hidden');
+            setListeningUI(false);
+        }
+        voiceWrap.classList.toggle('hidden', !show);
+    }
+
+    function setStatus(message) {
+        if (status) status.textContent = message;
+    }
+
+    function setListeningUI(active) {
+        listening = active;
+        if (voiceIcon) voiceIcon.textContent = active ? '⏹️' : '🎙️';
+        if (voiceBtn) {
+            voiceBtn.classList.toggle('ring-4', active);
+            voiceBtn.classList.toggle('ring-brand-300/40', active);
+            voiceBtn.classList.toggle('scale-[1.03]', active);
+        }
+        if (voiceButtonText) voiceButtonText.textContent = active ? 'Listening...' : 'Speak your requirements';
+    }
+
+    function getSpeechLanguage() {
+        const selected = document.getElementById('lang-select')?.value || 'English';
+        return {
+            English: 'en-IN',
+            Hindi: 'hi-IN',
+            Marathi: 'mr-IN',
+            Punjabi: 'pa-IN'
+        }[selected] || 'en-IN';
+    }
+
+    function showPanel() {
+        panel.classList.remove('hidden');
+    }
+
+    function fillField(id, value) {
+        if (value === null || value === undefined || String(value).trim() === '') return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.value = String(value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function applyVoiceData(data) {
+        const map = {
+            commodity: 'commodity',
+            food_type: 'food_type',
+            moisture: 'moisture',
+            fat: 'fat',
+            ph: 'ph',
+            storage_type: 'storage_type',
+            temp: 'temp',
+            humidity: 'humidity',
+            shelf_life: 'shelf_life',
+            respiration: 'respiration',
+            transport: 'transport',
+            budget: 'budget',
+            extra_notes: 'extra_notes'
+        };
+
+        Object.keys(map).forEach(key => fillField(map[key], data[key]));
+
+        if (data.language && document.getElementById('lang-select')) {
+            const langSelect = document.getElementById('lang-select');
+            if ([...langSelect.options].some(option => option.value === data.language)) {
+                langSelect.value = data.language;
+                langSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+    }
+
+    async function parseVoiceText(text) {
+        setStatus('🧠 Understanding what you said...');
+        try {
+            const res = await fetch('/api/parse-voice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    transcript: text,
+                    language: document.getElementById('lang-select')?.value || 'English'
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Could not understand the voice input.');
+            }
+
+            applyVoiceData(data);
+            setStatus('✅ Done! I filled the details I understood. Please check them once.');
+            if (typeof showToast === 'function') {
+                showToast('Voice input understood — the form has been filled. Please review it.', 'success');
+            }
+        } catch (error) {
+            console.error('Voice parsing error:', error);
+            setStatus('⚠️ I heard you, but I could not fill the form. Please try again.');
+            if (typeof showToast === 'function') {
+                showToast('Could not process the voice request. Please try again.', 'warning');
+            }
+        }
+    }
+
+    // Always keep this feature visible only on the logged-in home/input page.
+    const visibilityTargets = [
+        document.getElementById('auth-section'),
+        document.getElementById('input-stage')
+    ].filter(Boolean);
+    [
+        ...visibilityTargets,
+        document.getElementById('app-section'),
+        document.getElementById('workspace-section'),
+        document.getElementById('result-section'),
+        document.getElementById('compare-result')
+    ].filter(Boolean).forEach(target => {
+        new MutationObserver(syncVoiceVisibility).observe(target, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    });
+
+    if (!SpeechRecognition) {
+        voiceBtn.addEventListener('click', () => {
+            showPanel();
+            setStatus('⚠️ Voice input is not supported in this browser. Please use Google Chrome.');
+        });
+        syncVoiceVisibility();
+        return;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    voiceBtn.addEventListener('click', () => {
+        if (!isHomeInputVisible()) return;
+        showPanel();
+
+        if (listening) {
+            setStatus('⏹️ Stopping...');
+            recognition.stop();
+            return;
+        }
+
+        finalTranscript = '';
+        if (transcriptBox) {
+            transcriptBox.textContent = '';
+            transcriptBox.classList.add('hidden');
+        }
+
+        recognition.lang = getSpeechLanguage();
+        setStatus('🎙️ Starting microphone...');
+
+        try {
+            recognition.start();
+        } catch (error) {
+            console.log('Voice start error:', error);
+            setStatus('⚠️ Microphone is already starting. Please wait a moment.');
+        }
+    });
+
+    closeBtn?.addEventListener('click', () => {
+        if (listening) {
+            try { recognition.stop(); } catch (e) {}
+        }
+        panel.classList.add('hidden');
+    });
+
+    recognition.onstart = () => {
+        setListeningUI(true);
+        setStatus('🔴 Listening... Speak your full requirements now.');
+    };
+
+    recognition.onresult = (event) => {
+        let displayTranscript = finalTranscript;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const spoken = event.results[i][0].transcript.trim();
+            if (!spoken) continue;
+
+            if (event.results[i].isFinal) {
+                finalTranscript = (finalTranscript + ' ' + spoken).trim();
+            } else {
+                displayTranscript = (finalTranscript + ' ' + spoken).trim();
+            }
+        }
+
+        displayTranscript = displayTranscript || finalTranscript;
+
+        if (transcriptBox && displayTranscript) {
+            transcriptBox.textContent = '“' + displayTranscript + '”';
+            transcriptBox.classList.remove('hidden');
+            setStatus('👂 I can hear you...');
+        }
+    };
+
+    recognition.onerror = (event) => {
+        console.log('Voice recognition error:', event.error);
+        setListeningUI(false);
+
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            setStatus('🎙️ Microphone permission is blocked. Allow microphone access in Chrome and try again.');
+        } else if (event.error === 'no-speech') {
+            setStatus('👂 No speech detected. Tap the mic and speak clearly.');
+        } else if (event.error === 'audio-capture') {
+            setStatus('⚠️ No microphone was detected. Check your microphone and try again.');
+        } else {
+            setStatus('⚠️ Voice input stopped. Please try again.');
+        }
+    };
+
+    recognition.onend = () => {
+        setListeningUI(false);
+        const text = finalTranscript.trim();
+
+        if (!text) {
+            setStatus('👂 No speech was captured. Tap the mic and try again.');
+            return;
+        }
+
+        if (transcriptBox) {
+            transcriptBox.textContent = '“' + text + '”';
+            transcriptBox.classList.remove('hidden');
+        }
+
+        parseVoiceText(text);
+    };
+
+    syncVoiceVisibility();
+})();
+});
+
+
+// --- GENERATE LOGIC ---
         function buildPayload(commodityOverride) {
             return {
                 language: document.getElementById('lang-select').value,
@@ -2170,6 +2575,38 @@
             runGenerate(compareMode, payload, commodityB);
         };
 
+
+        // --- WORKSPACE NAVIGATION ---
+        (function setupWorkspace() {
+            const workspace = document.getElementById('workspace-section');
+            if (!workspace) return;
+            const tabs = Array.from(workspace.querySelectorAll('[data-workspace-tab]'));
+            const itemsPanel = document.getElementById('workspace-items-panel');
+            const expiryPanel = document.getElementById('workspace-expiry-panel');
+
+            function openWorkspace(tab = 'items') {
+                workspace.classList.remove('hidden');
+                tabs.forEach(tabButton => {
+                    const active = tabButton.dataset.workspaceTab === tab;
+                    tabButton.classList.toggle('active', active);
+                    tabButton.classList.toggle('text-slate-600', !active);
+                    tabButton.classList.toggle('dark:text-slate-300', !active);
+                });
+                itemsPanel.classList.toggle('hidden', tab !== 'items');
+                expiryPanel.classList.toggle('hidden', tab !== 'expiry');
+                workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            tabs.forEach(tab => tab.addEventListener('click', () => openWorkspace(tab.dataset.workspaceTab)));
+            ['open-items-side','open-items-shortcut'].forEach(id => document.getElementById(id)?.addEventListener('click', () => openWorkspace('items')));
+            ['open-expiry-side','open-expiry-shortcut'].forEach(id => document.getElementById(id)?.addEventListener('click', () => openWorkspace('expiry')));
+            document.getElementById('close-workspace')?.addEventListener('click', () => workspace.classList.add('hidden'));
+            document.getElementById('workspace-home')?.addEventListener('click', () => {
+    workspace.classList.add('hidden');
+    document.getElementById('input-stage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+        })();
+
         // --- KEYBOARD SHORTCUT: Ctrl/Cmd+Enter to generate ---
         document.addEventListener('keydown', (e) => {
             const isEnterCombo = (e.key === 'Enter') && (e.ctrlKey || e.metaKey);
@@ -2254,7 +2691,34 @@
         window.addEventListener("load", () => {
             loadSearchHistory();
             loadExpiringSoon();
+            setTimeout(() => document.getElementById('startup-loader')?.classList.add('loader-hidden'), 900);
         });
     </script>
+
+
+<!-- --- FLOATING VOICE FORM FILL --- -->
+<div id="voice-assistant-wrap" class="hidden fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3">
+    <div id="voice-assistant-panel" class="hidden w-[min(360px,calc(100vw-32px))] rounded-3xl border border-brand-400/30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl p-4">
+        <div class="flex items-start justify-between gap-3">
+            <div>
+                <div class="font-black text-base text-slate-900 dark:text-white">🎙️ Voice Fill</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">Speak your complete packaging requirements in one sentence.</div>
+            </div>
+            <button type="button" id="voice-panel-close" class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white">×</button>
+        </div>
+        <div id="voice-assistant-status" class="mt-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3 text-sm font-bold text-slate-600 dark:text-slate-300">Tap the microphone and start speaking.</div>
+        <div id="voice-assistant-transcript" class="hidden mt-3 rounded-2xl border border-slate-200 dark:border-slate-700 p-3 text-sm text-slate-700 dark:text-slate-200"></div>
+        <div class="mt-3 text-[11px] text-slate-400 dark:text-slate-500">English • Hindi • Marathi • Punjabi</div>
+    </div>
+
+    <button type="button" id="floating-voice-btn" aria-label="Speak your requirements" class="group flex items-center gap-3 rounded-full border border-brand-400/50 bg-slate-950/95 dark:bg-slate-900/95 px-4 py-3 text-white shadow-2xl backdrop-blur-xl hover:scale-[1.03] transition-all">
+        <span id="floating-voice-icon" class="flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-xl shadow-lg">🎙️</span>
+        <span class="pr-1 text-left">
+            <span class="voice-button-text block text-sm font-black">Speak your requirements</span>
+            <span class="block text-[11px] text-slate-300">Fill the form by voice</span>
+        </span>
+    </button>
+</div>
+
 </body>
 </html>
