@@ -116,7 +116,7 @@
         #skeleton-section .skel-line { height: 0.85rem; border-radius: 0.4rem; }
 
         @media print {
-            nav, #input-stage, #side-presets, #new-analysis-btn, #copy-report, #download-qr, #download-pdf, #download-qr, .quick-preset, #result-mini-nav, #compare-result, #offline-banner, #confidence-badge, #generate-error { display: none !important; }
+            nav, #input-stage, #side-presets, #new-analysis-btn, #copy-report, #download-qr, #download-pdf, #download-spec-sheet, #download-qr, .quick-preset, #result-mini-nav, #compare-result, #offline-banner, #confidence-badge, #generate-error { display: none !important; }
             body { background: white !important; }
             .theme-overlay { display: none !important; }
             #result-section, #result-section * { visibility: visible; }
@@ -152,6 +152,7 @@
                     <option value="English">🇬🇧 English</option>
                     <option value="Hindi">🇮🇳 Hindi</option>
                     <option value="Marathi">🚩 Marathi</option>
+                    <option value="Punjabi">🌽 Punjabi</option>
                 </select>
 
                 <button id="compact-toggle" class="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" title="Toggle compact mode">🗜️</button>
@@ -197,6 +198,7 @@
                             <option value="English">🇬🇧 English</option>
                             <option value="Hindi">🇮🇳 Hindi</option>
                             <option value="Marathi">🚩 Marathi</option>
+                            <option value="Punjabi">🌽 Punjabi</option>
                         </select>
                     </div>
                 </div>
@@ -258,6 +260,20 @@
                                         <div class="md:col-span-2">
                                             <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="food_name">What food are you packaging?</label>
                                             <input id="commodity" class="input-premium" placeholder="e.g. mangoes, chips, milk, rice" data-placeholder-key="food_placeholder">
+                                        </div>
+                                        <div class="md:col-span-2 -mt-2">
+                                            <div class="flex items-center gap-3 flex-wrap">
+                                                <label for="commodity-photo-input" id="commodity-photo-label" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-brand-400/60 dark:border-brand-400/40 text-sm font-bold text-brand-600 dark:text-brand-400 cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-900/20 transition">
+                                                    <span>📷</span>
+                                                    <span data-key="photo_upload_label">Or snap/upload a photo instead</span>
+                                                </label>
+                                                <input type="file" id="commodity-photo-input" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden">
+                                                <div id="commodity-photo-preview-wrap" class="hidden items-center gap-2">
+                                                    <img id="commodity-photo-preview" class="w-28.5 h-28.5 rounded-xl object-cover border-2 border-slate-300 dark:border-slate-600 shadow-sm" alt="">
+                                                    <button type="button" id="commodity-photo-clear" class="text-base font-bold text-slate-400 hover:text-red-500 px-1" title="Remove photo">✕</button>
+                                                </div>
+                                                <span id="commodity-photo-status" class="text-base font-bold text-slate-600 dark:text-slate-300"></span>
+                                            </div>
                                         </div>
                                         <div class="md:col-span-2 flex items-center gap-2">
                                             <input type="checkbox" id="compare-toggle" class="w-4 h-4 rounded accent-brand-500">
@@ -537,6 +553,7 @@
                                 <button id="new-analysis-btn" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition-all" data-key="new_analysis">New Analysis</button>
                                 <button id="copy-report" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-bold transition-all" data-key="copy_btn">📋 Copy report</button>
                                 <button id="download-pdf" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-bold transition-all" data-key="pdf_btn">⬇ Download PDF</button>
+                                <button id="download-spec-sheet" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-sm font-bold transition-all" data-key="spec_btn">📄 Supplier Spec Sheet</button>
                             </div>
                         </div>
                         
@@ -774,7 +791,7 @@
                 opt_resp_none: "Not sure", opt_resp_low: "Low", opt_resp_med: "Medium", opt_resp_high: "High",
                 generate: "✨ Show Me My Packaging Plan", loading: "Cooking up your packaging plan…",
                 result_sub: "YOUR PACKAGING PLAN", result_title: "📦 Here's what we'd recommend", result_desc: "Practical guidance first. Technical details when you need them.",
-                new_analysis: "New Analysis", copy_btn: "📋 Copy report", pdf_btn: "⬇ Download PDF",
+                new_analysis: "New Analysis", copy_btn: "📋 Copy report", pdf_btn: "⬇ Download PDF", spec_btn: "📄 Supplier Spec Sheet", spec_btn_loading: "Generating…", spec_btn_error: "Could not generate the spec sheet. Please try again.", spec_btn_need_result: "Generate a recommendation first.",
                 waste_prefix: "Choosing the recommended option means about", waste_suffix: "fewer units spoiled for every 1,000 you pack.",
                 compare_title: "Predicted shelf life by material",
                 ai_disclaimer: "This is an AI-generated draft to help you get started, not a final specification. Always confirm technical specs, food-contact safety and FSSAI compliance with a lab, vendor or compliance professional before production.",
@@ -791,6 +808,12 @@
                 tech_title: "🔬 Technical details",
                 value_per_unit: "Selling price per unit (₹, optional)", ex_value: "e.g. 20",
                 compare_toggle: "Compare with a second food", compare_food_label: "Second food to compare", compare_food_placeholder: "e.g. banana chips",
+                photo_upload_label: "Or snap/upload a photo instead", photo_status_identifying: "🔎 Identifying...",
+                toast_photo_identified_with_note: "Identified as {commodity}. {note} Please review the pre-filled fields.",
+                toast_photo_identified: "Identified as {commodity} — please review the pre-filled fields below.",
+                toast_photo_error_generic: "Couldn't analyze that photo. Please try again.",
+                toast_photo_not_identified_fallback: "Couldn't identify a food item in that photo.",
+                toast_photo_network_error: "Network error while analyzing the photo. Please try again.",
                 expiring_title: "Expiring Soon", expiring_empty: "No batches expiring in the next 2 weeks.",
                 expiring_days_left: "days left",
                 break_even_title: "Does the pricier packaging pay for itself?",
@@ -845,7 +868,7 @@
                 opt_resp_none: "पता नहीं", opt_resp_low: "कम", opt_resp_med: "मध्यम", opt_resp_high: "उच्च",
                 generate: "✨ मेरी पैकेजिंग योजना दिखाएं", loading: "आपकी पैकेजिंग योजना तैयार की जा रही है…",
                 result_sub: "आपकी पैकेजिंग योजना", result_title: "📦 यहाँ हमारी सिफारिशें हैं", result_desc: "पहले व्यावहारिक मार्गदर्शन। जरूरत पड़ने पर तकनीकी विवरण।",
-                new_analysis: "नया विश्लेषण", copy_btn: "📋 रिपोर्ट कॉपी करें", pdf_btn: "⬇ PDF डाउनलोड करें",
+                new_analysis: "नया विश्लेषण", copy_btn: "📋 रिपोर्ट कॉपी करें", pdf_btn: "⬇ PDF डाउनलोड करें", spec_btn: "📄 सप्लायर स्पेसिफिकेशन शीट", spec_btn_loading: "बन रहा है…", spec_btn_error: "स्पेसिफिकेशन शीट नहीं बन सकी। कृपया फिर से कोशिश करें।", spec_btn_need_result: "पहले एक सिफारिश जनरेट करें।",
                 waste_prefix: "अनुशंसित विकल्प चुनने से प्रति 1,000 यूनिट पैक करने पर लगभग", waste_suffix: "कम यूनिट खराब होती हैं।",
                 compare_title: "सामग्री के अनुसार अनुमानित शेल्फ लाइफ",
                 ai_disclaimer: "यह एक एआई-जनित मसौदा है, अंतिम विनिर्देश नहीं। उत्पादन से पहले तकनीकी विवरण, खाद्य-संपर्क सुरक्षा और FSSAI अनुपालन की पुष्टि किसी लैब, विक्रेता या अनुपालन विशेषज्ञ से करें।",
@@ -862,6 +885,12 @@
                 tech_title: "🔬 तकनीकी विवरण",
                 value_per_unit: "प्रति यूनिट बिक्री मूल्य (₹, वैकल्पिक)", ex_value: "उदा. 20",
                 compare_toggle: "दूसरे भोजन से तुलना करें", compare_food_label: "तुलना के लिए दूसरा भोजन", compare_food_placeholder: "उदा. केले के चिप्स",
+                photo_upload_label: "या इसके बजाय फोटो लें/अपलोड करें", photo_status_identifying: "🔎 पहचान की जा रही है...",
+                toast_photo_identified_with_note: "{commodity} के रूप में पहचाना गया। {note} कृपया पहले से भरे गए फ़ील्ड की समीक्षा करें।",
+                toast_photo_identified: "{commodity} के रूप में पहचाना गया — कृपया नीचे दिए गए पहले से भरे फ़ील्ड की समीक्षा करें।",
+                toast_photo_error_generic: "उस फोटो का विश्लेषण नहीं हो सका। कृपया पुनः प्रयास करें।",
+                toast_photo_not_identified_fallback: "उस फोटो में कोई खाद्य पदार्थ पहचाना नहीं जा सका।",
+                toast_photo_network_error: "फोटो का विश्लेषण करते समय नेटवर्क त्रुटि हुई। कृपया पुनः प्रयास करें।",
                 expiring_title: "जल्द समाप्त होने वाले", expiring_empty: "अगले 2 हफ्तों में कोई बैच समाप्त नहीं हो रहा।",
                 expiring_days_left: "दिन शेष",
                 break_even_title: "क्या महंगी पैकेजिंग अपनी लागत निकाल पाती है?",
@@ -916,7 +945,7 @@
                 opt_resp_none: "माहित नाही", opt_resp_low: "कमी", opt_resp_med: "मध्यम", opt_resp_high: "उच्च",
                 generate: "✨ माझी पॅकेजिंग योजना दाखवा", loading: "तुमची पॅकेजिंग योजना तयार होत आहे…",
                 result_sub: "तुमची पॅकेजिंग योजना", result_title: "📦 ही आमची शिफारस आहे", result_desc: "प्रथम व्यावहारिक मार्गदर्शन. गरज पडल्यास तांत्रिक तपशील.",
-                new_analysis: "नवीन विश्लेषण", copy_btn: "📋 अहवाल कॉपी करा", pdf_btn: "⬇ PDF डाउनलोड करा",
+                new_analysis: "नवीन विश्लेषण", copy_btn: "📋 अहवाल कॉपी करा", pdf_btn: "⬇ PDF डाउनलोड करा", spec_btn: "📄 पुरवठादार स्पेसिफिकेशन शीट", spec_btn_loading: "तयार होत आहे…", spec_btn_error: "स्पेसिफिकेशन शीट तयार करता आली नाही. कृपया पुन्हा प्रयत्न करा.", spec_btn_need_result: "आधी एक शिफारस तयार करा.",
                 waste_prefix: "शिफारस केलेला पर्याय निवडल्यास दर 1,000 युनिट पॅक केल्यावर अंदाजे", waste_suffix: "कमी युनिट खराब होतात.",
                 compare_title: "सामग्रीनुसार अंदाजित शेल्फ लाइफ",
                 ai_disclaimer: "हा एआय-निर्मित मसुदा आहे, अंतिम तपशील नाही. उत्पादनापूर्वी तांत्रिक तपशील, अन्न-संपर्क सुरक्षा आणि FSSAI अनुपालनाची खात्री लॅब, विक्रेता किंवा अनुपालन तज्ञाकडून करा.",
@@ -933,6 +962,12 @@
                 tech_title: "🔬 तांत्रिक तपशील",
                 value_per_unit: "प्रति युनिट विक्री किंमत (₹, ऐच्छिक)", ex_value: "उदा. 20",
                 compare_toggle: "दुसऱ्या अन्नाशी तुलना करा", compare_food_label: "तुलनेसाठी दुसरे अन्न", compare_food_placeholder: "उदा. केळीचे चिप्स",
+                photo_upload_label: "किंवा त्याऐवजी फोटो काढा/अपलोड करा", photo_status_identifying: "🔎 ओळखले जात आहे...",
+                toast_photo_identified_with_note: "{commodity} म्हणून ओळखले. {note} कृपया आधीच भरलेली फील्ड तपासा.",
+                toast_photo_identified: "{commodity} म्हणून ओळखले — कृपया खालील आधीच भरलेली फील्ड तपासा.",
+                toast_photo_error_generic: "त्या फोटोचे विश्लेषण करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
+                toast_photo_not_identified_fallback: "त्या फोटोमध्ये कोणताही अन्नपदार्थ ओळखता आला नाही.",
+                toast_photo_network_error: "फोटोचे विश्लेषण करताना नेटवर्क त्रुटी आली. कृपया पुन्हा प्रयत्न करा.",
                 expiring_title: "लवकरच संपणारे", expiring_empty: "पुढील 2 आठवड्यांत कोणतेही बॅच संपत नाहीत.",
                 expiring_days_left: "दिवस शिल्लक",
                 break_even_title: "महाग पॅकेजिंग स्वतःचा खर्च भरून काढते का?",
@@ -1582,6 +1617,60 @@
             window.print();
         };
 
+        // Supplier Spec Sheet: reuses the same payload/data already saved by
+        // cacheLastResult() after a successful /api/generate call -- no new
+        // AI call, just re-sends the already-generated, already-validated
+        // numbers to the backend so it can format them as a PDF document.
+        document.getElementById("download-spec-sheet").onclick = async () => {
+            const lang = document.getElementById('lang-select').value;
+            const dict = i18n[lang] || i18n.English;
+            const btn = document.getElementById("download-spec-sheet");
+
+            let cached;
+            try {
+                cached = JSON.parse(localStorage.getItem("packsense-last-result") || "null");
+            } catch (e) {
+                cached = null;
+            }
+            if (!cached || !cached.payload || !cached.data) {
+                showToast(dict.spec_btn_need_result || "Generate a recommendation first.", "error");
+                return;
+            }
+
+            const originalText = btn.innerText;
+            btn.innerText = dict.spec_btn_loading || "Generating…";
+            btn.disabled = true;
+            try {
+                const response = await fetch("/api/spec-sheet", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        form_data: cached.payload,
+                        roi_data: cached.data.roi_data || null,
+                        trace: cached.data.trace || null,
+                        photo: cached.photo || null
+                    })
+                });
+                if (!response.ok) {
+                    throw new Error("spec sheet request failed");
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "packaging-spec-sheet.pdf";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                showToast(dict.spec_btn_error || "Could not generate the spec sheet. Please try again.", "error");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        };
+
         document.getElementById("copy-report").onclick = async () => {
             if (!lastRecommendation) return;
             const lang = document.getElementById('lang-select').value;
@@ -1632,6 +1721,152 @@
                 document.getElementById('humidity').dispatchEvent(new Event('input'));
             };
         });
+
+        // Compressed reference photo of the identified food, kept in memory
+        // only (never persisted server-side until the user explicitly
+        // downloads a spec sheet) so it can be attached to the Supplier Spec
+        // Sheet PDF as a visual reference. Cleared whenever the photo is
+        // removed, re-uploaded, or fails to identify.
+        let commodityPhotoDataUrl = null;
+
+        function compressImageToDataUrl(file, maxDim = 640, quality = 0.72) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > height && width > maxDim) {
+                            height = Math.round(height * (maxDim / width));
+                            width = maxDim;
+                        } else if (height > maxDim) {
+                            width = Math.round(width * (maxDim / height));
+                            height = maxDim;
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // --- PHOTO-BASED COMMODITY INPUT ---
+        (function setupCommodityPhotoInput() {
+            const fileInput = document.getElementById('commodity-photo-input');
+            const label = document.getElementById('commodity-photo-label');
+            const previewWrap = document.getElementById('commodity-photo-preview-wrap');
+            const previewImg = document.getElementById('commodity-photo-preview');
+            const clearBtn = document.getElementById('commodity-photo-clear');
+            const statusEl = document.getElementById('commodity-photo-status');
+            if (!fileInput) return;
+
+            let objectUrl = null;
+
+            function setStatus(text) {
+                statusEl.textContent = text || "";
+            }
+
+            function resetPhotoUI() {
+                fileInput.value = "";
+                previewWrap.classList.add('hidden');
+                previewWrap.classList.remove('flex');
+                if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+                commodityPhotoDataUrl = null;
+                setStatus("");
+            }
+
+            clearBtn.addEventListener('click', resetPhotoUI);
+
+            fileInput.addEventListener('change', async () => {
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) return;
+
+                const lang = document.getElementById('lang-select').value;
+                const dict = i18n[lang] || i18n.English;
+
+                commodityPhotoDataUrl = null; // cleared until this photo is confirmed identified below
+
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+                objectUrl = URL.createObjectURL(file);
+                previewImg.src = objectUrl;
+                previewWrap.classList.remove('hidden');
+                previewWrap.classList.add('flex');
+
+                setStatus(dict.photo_status_identifying || "🔎 Identifying...");
+                label.classList.add('opacity-60', 'pointer-events-none');
+
+                try {
+                    const formData = new FormData();
+                    formData.append('image', file);
+                    const res = await fetch('/api/identify-commodity', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        setStatus("");
+                        showToast(data.error || dict.toast_photo_error_generic || "Couldn't analyze that photo. Please try again.", "error");
+                        return;
+                    }
+
+                    if (!data.identified) {
+                        setStatus("");
+                        showToast(data.message || dict.toast_photo_not_identified_fallback || "Couldn't identify a food item in that photo.", "warning");
+                        return;
+                    }
+
+                    if (data.commodity) {
+                        document.getElementById('commodity').value = data.commodity;
+                    }
+                    if (data.food_type) {
+                        const foodTypeSelect = document.getElementById('food_type');
+                        const optionExists = Array.from(foodTypeSelect.options).some(o => o.value === data.food_type);
+                        if (optionExists) foodTypeSelect.value = data.food_type;
+                    }
+                    if (data.moisture_percent !== null && data.moisture_percent !== undefined) {
+                        document.getElementById('moisture').value = data.moisture_percent;
+                    }
+                    if (data.fat_percent !== null && data.fat_percent !== undefined) {
+                        document.getElementById('fat').value = data.fat_percent;
+                    }
+                    if (data.respiration) {
+                        const respirationSelect = document.getElementById('respiration');
+                        const respExists = Array.from(respirationSelect.options).some(o => o.value === data.respiration);
+                        if (respExists) respirationSelect.value = data.respiration;
+                    }
+
+                    setStatus("✅ " + (data.commodity || "Identified"));
+                    // Compressed now (it's fast, <640px) and awaited so it's guaranteed
+                    // ready before the user can click Generate -- avoids a race where a
+                    // fire-and-forget compression hadn't finished yet at cache time.
+                    try {
+                        commodityPhotoDataUrl = await compressImageToDataUrl(file);
+                    } catch (e) {
+                        commodityPhotoDataUrl = null; // no photo on the spec sheet, not a failed identification
+                    }
+                    const template = data.note
+                        ? (dict.toast_photo_identified_with_note || "Identified as {commodity}. {note} Please review the pre-filled fields.")
+                        : (dict.toast_photo_identified || "Identified as {commodity} — please review the pre-filled fields below.");
+                    showToast(
+                        template.replace("{commodity}", data.commodity).replace("{note}", data.note || ""),
+                        "success"
+                    );
+                } catch (err) {
+                    setStatus("");
+                    showToast(dict.toast_photo_network_error || "Network error while analyzing the photo. Please try again.", "error");
+                } finally {
+                    label.classList.remove('opacity-60', 'pointer-events-none');
+                }
+            });
+        })();
 
         // --- GENERATE LOGIC ---
         function buildPayload(commodityOverride) {
@@ -1736,9 +1971,9 @@
             }, 3200);
         }
 
-        function cacheLastResult(payload, data) {
+        function cacheLastResult(payload, data, photo) {
             try {
-                localStorage.setItem("packsense-last-result", JSON.stringify({ payload, data, savedAt: Date.now() }));
+                localStorage.setItem("packsense-last-result", JSON.stringify({ payload, data, photo: photo || null, savedAt: Date.now() }));
             } catch (e) { /* storage full or unavailable — non-fatal */ }
         }
 
@@ -1879,7 +2114,7 @@
                     showResultFromData(payload.commodity, data);
                     loadSearchHistory();
                     loadExpiringSoon();
-                    cacheLastResult(payload, data);
+                    cacheLastResult(payload, data, commodityPhotoDataUrl);
                     showToast(dict.toast_plan_ready || "Your packaging plan is ready!", "success");
 
                     setTimeout(() => window.scrollTo({top: 0, behavior: "smooth"}), 260);
@@ -1966,6 +2201,39 @@
             document.getElementById('btn-generate').disabled = false;
             window.scrollTo({top: 0, behavior: "smooth"});
         });
+
+        // --- MINI-NAV TAB CLICKS: scroll with the REAL sticky-bar height ---
+        // The section targets use a fixed scroll-mt-32 (8rem) as a rough
+        // fallback, but the main nav + mini-nav's actual combined height can
+        // run a little taller than that (e.g. when the mini-nav wraps to two
+        // lines on a narrower screen, or its own padding/height changes),
+        // which left the top of each section hidden behind the tab bar.
+        // Measuring both bars' real height at click time and scrolling to
+        // that exact offset fixes it regardless of screen size or future
+        // nav/tab-bar height changes.
+        (function setupMiniNavClickOffset() {
+            const nav = document.getElementById('result-mini-nav');
+            if (!nav) return;
+            const mainNav = document.querySelector('nav.sticky') || document.querySelector('nav');
+            const EXTRA_BREATHING_ROOM = 16; // px of extra gap below the bars, purely cosmetic
+
+            nav.querySelectorAll('.mini-nav-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    const targetId = link.getAttribute('href');
+                    const target = targetId && document.querySelector(targetId);
+                    if (!target) return; // fall back to default anchor jump if target is missing
+                    e.preventDefault();
+
+                    const mainNavHeight = mainNav ? mainNav.getBoundingClientRect().height : 0;
+                    const miniNavHeight = nav.getBoundingClientRect().height;
+                    const offset = mainNavHeight + miniNavHeight + EXTRA_BREATHING_ROOM;
+
+                    const targetTop = target.getBoundingClientRect().top + window.pageYOffset - offset;
+                    window.scrollTo({ top: Math.max(targetTop, 0), behavior: 'smooth' });
+                    history.replaceState(null, '', targetId);
+                });
+            });
+        })();
 
         // --- MINI-NAV ACTIVE-LINK HIGHLIGHTING ---
         (function setupMiniNavScrollSpy() {
