@@ -3,11 +3,13 @@ import database as db
 import materials
 import spec_sheet
 from google import genai
+from google.genai import types
 import os
 import re
 import json
 import time
 import uuid
+import base64
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -412,7 +414,10 @@ on the food type and conditions given; state clearly in the main text above if t
                     # --- CHANGE 2 OF 2: validate/clamp Gemini's numbers against
                     # the materials database before anything else touches them. ---
                     extra_data = materials.validate_recommendation(
-                        extra_data, relevant_materials, food_type=data.get('food_type', '')
+                        extra_data, relevant_materials,
+                        food_type=data.get('food_type', ''),
+                        respiration=data.get('respiration', ''),
+                        fat=data.get('fat'),
                     )
                     extra_data["confidence"] = compute_confidence(data)
                     break_even = compute_break_even(extra_data, data.get("value_per_unit"))
@@ -505,6 +510,131 @@ def upcoming_expiry():
     return jsonify(upcoming)
 
 
+VALID_FOOD_TYPES = [
+    "Fresh produce", "Dry / low-moisture food", "Snack / fried food",
+    "Dairy", "Meat / seafood", "Processed / ready-to-eat", "Other",
+]
+ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB — generous for a phone photo, small enough to fail fast
+
+
+@app.route('/api/identify-commodity', methods=['POST'])
+def identify_commodity():
+    """
+    Photo-based commodity input. Takes a food photo, asks Gemini's vision
+    capability to identify the commodity and estimate the packaging-relevant
+    properties (food_type category, rough moisture/fat %, respiration),
+    and returns them so the frontend can pre-fill Step 1 of the form.
+
+    This never writes a recommendation or touches the materials database --
+    it only proposes values for the user to review/edit before they hit
+    "Generate", same as if they'd typed them in themselves.
+    """
+    if 'username' not in session:
+        return jsonify({"error": "Not logged in"}), 401
+
+    if 'image' not in request.files:
+        return jsonify({"error": "No image uploaded"}), 400
+
+    image_file = request.files['image']
+    mime_type = image_file.mimetype or "image/jpeg"
+    if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+        return jsonify({"error": "Please upload a JPEG, PNG or WEBP image."}), 400
+
+    image_bytes = image_file.read()
+    if not image_bytes:
+        return jsonify({"error": "That image came through empty. Please try again."}), 400
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        return jsonify({"error": "That image is too large. Please use a photo under 8MB."}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"error": "Server configuration error: Gemini API Key is missing!"}), 500
+
+    prompt = f"""
+You are looking at a photo someone took of a food item they want to package for storage or sale.
+
+Identify the food commodity shown and estimate the packaging-relevant properties needed to
+recommend suitable packaging for it. Respond with ONLY a single fenced json code block and
+nothing else -- no preamble, no explanation outside the block -- using exactly these keys:
+
+{{
+  "identified": <true or false -- false if the image does not clearly show a food/food-adjacent item>,
+  "commodity": <short common name of the food item in English, e.g. "Mango" or "Potato chips". Empty string if not identified>,
+  "food_type": <exactly one of {VALID_FOOD_TYPES}>,
+  "moisture_percent": <number, your best typical estimate of moisture content percent for this food, or null if not meaningfully applicable>,
+  "fat_percent": <number, your best typical estimate of oil/fat content percent for this food, or null if not meaningfully applicable>,
+  "respiration": <one of "High", "Medium", "Low", "Not sure" -- whether this food keeps respiring/ripening after harvest>,
+  "note": <one short plain-English sentence flagging anything the user should double check or adjust, or empty string if nothing notable>
+}}
+
+Use your best realistic estimate for a typical specimen of this food -- these are starting values
+the user will review and can edit themselves, not final numbers. If several different foods are
+visible, identify the single most prominent one. If the photo is blurry, dark, or doesn't show a
+recognizable food item, set "identified" to false, "commodity" to "", other fields to null/"Not sure",
+and put a short explanation in "note".
+"""
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=MODELS[0],
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt,
+            ],
+        )
+        raw_text = response.text or ""
+    except Exception as e:
+        return jsonify({
+            "error": "Could not analyze that photo right now. Please try again in a moment.",
+            "details": str(e)
+        }), 503
+
+    match = re.search(r"```json\s*(\{.*?\})\s*```", raw_text, re.DOTALL)
+    if not match:
+        match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+    if not match:
+        return jsonify({"error": "Could not make sense of the photo. Please try a clearer shot or enter details manually."}), 502
+
+    try:
+        parsed = json.loads(match.group(1))
+    except Exception:
+        return jsonify({"error": "Could not make sense of the photo. Please try a clearer shot or enter details manually."}), 502
+
+    if not parsed.get("identified"):
+        return jsonify({
+            "identified": False,
+            "message": (parsed.get("note") or "").strip()
+                or "Couldn't clearly identify a food item in that photo — try a closer, well-lit shot, or enter the details manually."
+        })
+
+    food_type = parsed.get("food_type")
+    if food_type not in VALID_FOOD_TYPES:
+        food_type = "Other"
+
+    respiration = parsed.get("respiration")
+    if respiration not in ("High", "Medium", "Low", "Not sure"):
+        respiration = "Not sure"
+
+    def _clean_percent(value):
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return None
+        return round(max(0.0, min(100.0, v)), 1)
+
+    return jsonify({
+        "identified": True,
+        "commodity": (parsed.get("commodity") or "").strip(),
+        "food_type": food_type,
+        "moisture_percent": _clean_percent(parsed.get("moisture_percent")),
+        "fat_percent": _clean_percent(parsed.get("fat_percent")),
+        "respiration": respiration,
+        "note": (parsed.get("note") or "").strip(),
+    })
+
+
 @app.route('/api/spec-sheet', methods=['POST'])
 def spec_sheet_route():
     """
@@ -512,6 +642,13 @@ def spec_sheet_route():
     user already generated. No new Gemini call here -- the frontend sends
     back the same form_data, roi_data (extra_data) and trace it already has
     from the /api/generate response, and this just formats it as a document.
+
+    'photo' (optional): a compressed data URL ("data:image/jpeg;base64,...")
+    of the food photo the user uploaded during identification, if any. It is
+    never stored server-side -- decoded in-memory just long enough to embed
+    a small reference thumbnail in the PDF, purely for the supplier's visual
+    confirmation of the product. Not present for recommendations the user
+    typed in by hand.
     """
     if 'username' not in session:
         return jsonify({"error": "Not logged in"}), 401
@@ -521,8 +658,19 @@ def spec_sheet_route():
     extra_data = payload.get("roi_data") or {}
     trace_data = payload.get("trace") or {}
 
+    photo_bytes = None
+    photo_data_url = payload.get("photo")
+    if photo_data_url and isinstance(photo_data_url, str) and photo_data_url.startswith("data:image/"):
+        try:
+            header, b64_data = photo_data_url.split(",", 1)
+            photo_bytes = base64.b64decode(b64_data)
+            if len(photo_bytes) > MAX_IMAGE_BYTES:
+                photo_bytes = None  # ignore oversized/garbled payloads rather than failing the whole PDF
+        except Exception:
+            photo_bytes = None  # malformed data URL -- spec sheet still generates, just without the photo
+
     try:
-        pdf_buffer = spec_sheet.build_spec_sheet_pdf(form_data, extra_data, trace_data)
+        pdf_buffer = spec_sheet.build_spec_sheet_pdf(form_data, extra_data, trace_data, photo_bytes=photo_bytes)
     except Exception as e:
         return jsonify({"error": "Could not generate spec sheet.", "details": str(e)}), 500
 

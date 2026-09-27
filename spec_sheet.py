@@ -36,8 +36,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image
 )
+from reportlab.lib.utils import ImageReader
 
 import materials as materials_module
 
@@ -80,13 +81,18 @@ def _styles():
     return styles
 
 
-def build_spec_sheet_pdf(form_data: dict, extra_data: dict, trace_data: dict) -> io.BytesIO:
+def build_spec_sheet_pdf(form_data: dict, extra_data: dict, trace_data: dict,
+                          photo_bytes: Optional[bytes] = None) -> io.BytesIO:
     """
     form_data: the same dict the frontend already sends to /api/generate
                (commodity, food_type, shelf_life, storage_type, budget, transport)
     extra_data: the validated roi_data dict returned by /api/generate
                 (recommended_material, grounding, map_*, cost fields, etc.)
     trace_data: the batch/QR payload already returned by /api/generate
+    photo_bytes: optional raw bytes of the food photo the user uploaded
+                 during identification (JPEG/PNG), if any. Rendered as a
+                 small reference thumbnail so the supplier can visually
+                 confirm the product -- not a specification, just an aid.
     Returns an in-memory PDF (BytesIO), ready to send with send_file().
     """
     extra_data = extra_data or {}
@@ -113,6 +119,29 @@ def build_spec_sheet_pdf(form_data: dict, extra_data: dict, trace_data: dict) ->
     story.append(Spacer(1, 4 * mm))
     story.append(HRFlowable(width="100%", color=colors.HexColor("#cccccc"), thickness=0.75))
     story.append(Spacer(1, 4 * mm))
+
+    # --- Reference photo (optional, as submitted by the producer) ---
+    # Purely a visual aid so the supplier/converter can confirm what the
+    # product actually looks like -- not a specification, so it's kept
+    # small and clearly labeled rather than a full-width hero image.
+    if photo_bytes:
+        try:
+            reader = ImageReader(io.BytesIO(photo_bytes))
+            src_w, src_h = reader.getSize()
+            target_w = 40 * mm
+            target_h = target_w * (src_h / src_w) if src_w else target_w
+            max_h = 45 * mm
+            if target_h > max_h:
+                target_h = max_h
+                target_w = target_h * (src_w / src_h) if src_h else target_h
+            story.append(Image(io.BytesIO(photo_bytes), width=target_w, height=target_h))
+            story.append(Paragraph(
+                "Reference photo (as submitted by producer) -- for product identification only, not a specification.",
+                styles["Footer"]
+            ))
+            story.append(Spacer(1, 4 * mm))
+        except Exception:
+            pass  # a corrupt/unreadable image should never block the rest of the spec sheet
 
     # --- Product / order info table ---
     product_rows = [

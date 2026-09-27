@@ -346,7 +346,7 @@ def format_materials_context(materials: list) -> str:
 # "grounding" report so the frontend/judges can see what was verified.
 # ---------------------------------------------------------------------------
 def validate_recommendation(extra_data: dict, relevant_materials: list,
-                             food_type: str = "") -> dict:
+                             food_type: str = "", respiration: str = "", fat=None) -> dict:
     if not extra_data:
         return extra_data
 
@@ -444,6 +444,52 @@ def validate_recommendation(extra_data: dict, relevant_materials: list,
                 co2 = clamped_co2
             if o2 is not None and co2 is not None:
                 extra_data["map_n2_percent"] = round(100 - o2 - co2, 1)
+
+    # FALLBACK: don't let MAP guidance silently vanish for the two cases
+    # where low-oxygen packaging is a well-established, near-mandatory
+    # practice, not an optional flourish the AI can forget on a given run:
+    #   1. Respiring fresh produce (fruits/vegetables) -- the O2/CO2 balance
+    #      keeps the product breathing at a safe rate. Core to the PS itself.
+    #   2. Fat-rich, low-moisture foods (nuts, fried snacks, dried fruit
+    #      mixes with nuts) -- oxygen drives lipid oxidation/rancidity, so
+    #      these are routinely nitrogen-flushed in real packaging lines even
+    #      though the food itself doesn't "respire". This is exactly the
+    #      case that was missing before: a dried-fruit-and-nuts mix with
+    #      meaningful fat content but "Low"/non-produce respiration.
+    # Both fall back to a deterministic domain rule (the published ranges
+    # used above to clamp/verify the AI's own numbers), not a new AI guess.
+    category = _detect_category(food_type)
+    respiration_l = (respiration or "").lower()
+    is_respiring_produce = category == "fresh produce" or "high" in respiration_l or "medium" in respiration_l
+
+    fat_val = _to_float(fat)
+    is_oxidation_prone = fat_val is not None and fat_val >= 8 and category != "fresh produce"
+
+    has_usable_percentages = any(
+        extra_data.get(k) is not None
+        for k in ("map_o2_percent", "map_co2_percent", "map_n2_percent")
+    )
+
+    if (is_respiring_produce or is_oxidation_prone) and not (extra_data.get("map_relevant") and has_usable_percentages):
+        bounds_key = "fresh produce" if is_respiring_produce else "snack"
+        bounds = MAP_BOUNDS.get(bounds_key)
+        if bounds:
+            o2_low, o2_high, co2_low, co2_high = bounds
+            fallback_o2 = round((o2_low + o2_high) / 2, 1)
+            fallback_co2 = round((co2_low + co2_high) / 2, 1)
+            extra_data["map_relevant"] = True
+            extra_data["map_o2_percent"] = fallback_o2
+            extra_data["map_co2_percent"] = fallback_co2
+            extra_data["map_n2_percent"] = round(100 - fallback_o2 - fallback_co2, 1)
+            reason = (
+                "this respiring produce" if is_respiring_produce
+                else "this fat-rich, low-moisture food (oxidation/rancidity risk)"
+            )
+            grounding["adjustments"].append(
+                f"MAP gas mix was missing or incomplete for {reason} -- filled in with the published "
+                f"'{bounds_key}' range (O2 {fallback_o2}%, CO2 {fallback_co2}%) since low-oxygen "
+                "packaging materially extends shelf life for this type of food."
+            )
 
     extra_data["grounding"] = grounding
     return extra_data
