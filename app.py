@@ -420,6 +420,19 @@ on the food type and conditions given; state clearly in the main text above if t
                         fat=data.get('fat'),
                     )
                     extra_data["confidence"] = compute_confidence(data)
+
+                    # Q10 shelf-life model data for the frontend curve.
+                    # The AI's recommended shelf life is treated as the baseline
+                    # at the temperature entered by the user. Q10=2 means the
+                    # deterioration rate doubles for every 10°C increase.
+                    try:
+                        reference_temperature_c = float(data.get("temp"))
+                    except (TypeError, ValueError):
+                        reference_temperature_c = 25.0
+
+                    extra_data["reference_temperature_c"] = reference_temperature_c
+                    extra_data["q10"] = 2.0
+
                     break_even = compute_break_even(extra_data, data.get("value_per_unit"))
                     if break_even:
                         extra_data["break_even"] = break_even

@@ -152,6 +152,31 @@
         .workspace-item { transition: all .2s ease; }
         .workspace-item:hover { transform: translateX(3px); }
         .shortcut-glow { box-shadow: 0 0 0 1px rgba(16,185,129,.12), 0 12px 35px rgba(16,185,129,.08); }
+        .shelf-chart-tooltip { pointer-events: none; transition: opacity .15s ease; }
+        #shelf-life-curve-card .shelf-chart-surface {
+            display: block;
+            width: 100%;
+            background: #f8fafc;
+            border-radius: 1rem;
+        }
+        #shelf-life-curve-card .chart-axis-label,
+        #shelf-life-curve-card .chart-grid-label { fill: #334155 !important; }
+        #shelf-life-curve-card .chart-grid { stroke: rgba(100,116,139,.16); }
+        #shelf-life-curve-card .shelf-curve-note {
+            display: block;
+            margin-top: 0.75rem;
+             color: #000000 !important;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            font-weight: 600;
+            white-space: normal;
+            overflow: visible;
+        }
+        .dark #shelf-life-curve-card .shelf-chart-surface { background: #111827; }
+        .dark #shelf-life-curve-card .chart-axis-label,
+        .dark #shelf-life-curve-card .chart-grid-label { fill: #cbd5e1 !important; }
+        .dark #shelf-life-curve-card .chart-grid { stroke: rgba(148,163,184,.20); }
+        .dark #shelf-life-curve-card .shelf-curve-note { color: #000000 !important; }
         @media (max-width: 640px) { .workspace-scroll { max-height: 360px; } }
     </style>
 </head>
@@ -709,6 +734,52 @@
                                         <div id="comparison-rows" class="space-y-3"></div>
                                     </div>
 
+                                    <div id="shelf-life-curve-card" class="hidden mt-8 pt-6 border-t border-slate-200">
+                                        <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+                                            <div class="flex items-center gap-3">
+                                                <span class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-lg">🌡️</span>
+                                                <div>
+                                                    <h4 class="font-black text-lg" data-key="shelf_curve_title">Shelf-life vs temperature</h4>
+                                                    <p class="text-xs text-slate-500 mt-1 max-w-xl" data-key="shelf_curve_desc">A simple Q10 model shows how temperature can speed up or slow down shelf-life loss.</p>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <label for="q10-select" class="text-xs font-bold text-slate-500" data-key="shelf_curve_q10">Q10</label>
+                                                <select id="q10-select" class="input-premium !w-auto !py-2 !pl-3 !pr-8 text-sm font-bold">
+                                                    <option value="1.2">1.2</option>
+                                                    <option value="1.5">1.5</option>
+                                                    <option value="2" selected>2.0</option>
+                                                    <option value="2.5">2.5</option>
+                                                    <option value="3">3.0</option>
+                                                    <option value="3.5">3.5</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                                                <div class="text-[11px] uppercase tracking-wider font-extrabold text-slate-400" data-key="shelf_curve_reference">At entered temperature</div>
+                                                <div id="curve-reference-value" class="text-xl font-black text-slate-900 mt-1">—</div>
+                                                <div id="curve-reference-temp" class="text-xs text-slate-500 mt-1">—</div>
+                                            </div>
+                                            <div class="rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+                                                <div class="text-[11px] uppercase tracking-wider font-extrabold text-emerald-600" data-key="shelf_curve_cold">Cold chain at 4°C</div>
+                                                <div id="curve-cold-value" class="text-xl font-black text-emerald-700 mt-1">—</div>
+                                                <div class="text-xs text-emerald-600 mt-1" data-key="shelf_curve_cold_sub">recommended packaging</div>
+                                            </div>
+                                            <div class="rounded-2xl bg-amber-50 border border-amber-200 p-4">
+                                                <div class="text-[11px] uppercase tracking-wider font-extrabold text-amber-600" data-key="shelf_curve_cheap">Cheaper film</div>
+                                                <div id="curve-cheap-value" class="text-xl font-black text-amber-700 mt-1">—</div>
+                                                <div class="text-xs text-amber-600 mt-1" data-key="shelf_curve_cheap_sub">at entered temperature</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4 overflow-hidden shadow-sm">
+                                            <div id="shelf-life-chart" class="w-full" aria-label="Shelf-life curve chart"></div>
+                                        </div>
+                                        <p class="shelf-curve-note" data-key="shelf_curve_note">Q10 = 2 means the estimated deterioration rate doubles for each 10°C rise, so the estimated shelf life halves. This is a simple planning model, not a lab validation.</p>
+                                    </div>
+
                                     <div id="break-even-card" class="hidden mt-8 pt-6 border-t border-slate-200">
                                         <div class="flex items-center gap-3 mb-2">
                                             <span class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center text-lg">📈</span>
@@ -918,6 +989,15 @@
                 offline_note: "You're offline — showing your last saved recommendation.",
                 compare_result_title: "📦 Side-by-side comparison",
                 compare_material: "Recommended material", compare_structure: "Structure", compare_cost: "Cost/unit", compare_shelf: "Shelf life", compare_confidence: "Confidence",
+                shelf_curve_title: "Shelf-life vs temperature",
+                shelf_curve_desc: "A simple Q10 model shows how temperature can speed up or slow down shelf-life loss.",
+                shelf_curve_q10: "Q10",
+                shelf_curve_reference: "At entered temperature",
+                shelf_curve_cold: "Cold chain at 4°C",
+                shelf_curve_cold_sub: "recommended packaging",
+                shelf_curve_cheap: "Cheaper film",
+                shelf_curve_cheap_sub: "at entered temperature",
+                shelf_curve_note: "Q10 = 2 means the estimated deterioration rate doubles for each 10°C rise, so the estimated shelf life halves. This is a simple planning model, not a lab validation.",
                 error_generic: "Something went wrong. Please try again.",
                 error_retry: "↻ Try again",
                 temp_hint: "Enter a temperature between -30°C and 60°C.",
@@ -1495,6 +1575,122 @@
             card.classList.remove("hidden");
         }
 
+        // --- SIMPLE Q10 SHELF-LIFE CURVE ---
+        // Uses the user's entered temperature as the reference point:
+        // shelfLife(T) = referenceShelfLife * Q10^((referenceTemp - T) / 10)
+        function populateShelfLifeCurve(roi) {
+            const card = document.getElementById("shelf-life-curve-card");
+            const chart = document.getElementById("shelf-life-chart");
+            if (!card || !chart || !roi) return;
+
+            const refTemp = Number(roi.reference_temperature_c);
+            const recShelf = Number(roi.recommended_shelf_life_days);
+            const cheapShelf = Number(roi.cheap_shelf_life_days);
+
+            if (!Number.isFinite(refTemp) || !Number.isFinite(recShelf) || recShelf <= 0) {
+                card.classList.add("hidden");
+                chart.innerHTML = "";
+                return;
+            }
+
+            const q10Select = document.getElementById("q10-select");
+            const q10 = Number(q10Select?.value || roi.q10 || 2);
+            const coldTemp = 4;
+
+            function shelfAt(temp, baselineShelf) {
+                return baselineShelf * Math.pow(q10, (refTemp - temp) / 10);
+            }
+
+            const recCold = shelfAt(coldTemp, recShelf);
+            const refCheap = Number.isFinite(cheapShelf) && cheapShelf > 0
+                ? cheapShelf
+                : null;
+
+            document.getElementById("curve-reference-value").textContent =
+                `${Math.round(recShelf).toLocaleString("en-IN")} days`;
+            document.getElementById("curve-reference-temp").textContent =
+                `${refTemp.toFixed(1).replace(".0","")}°C · recommended`;
+
+            document.getElementById("curve-cold-value").textContent =
+                `${Math.round(recCold).toLocaleString("en-IN")} days`;
+
+            document.getElementById("curve-cheap-value").textContent =
+                refCheap != null ? `${Math.round(refCheap).toLocaleString("en-IN")} days` : "—";
+
+            // Keep the chart focused on a practical storage range instead of
+            // letting one very cold extrapolation dominate the y-axis.
+            const minTemp = Math.floor(Math.min(0, coldTemp - 5, refTemp - 20));
+            const maxTemp = Math.ceil(Math.max(40, refTemp + 15));
+            const step = 5;
+            const temps = [];
+            for (let t = minTemp; t <= maxTemp; t += step) temps.push(t);
+
+            const recValues = temps.map(t => shelfAt(t, recShelf));
+            const cheapValues = refCheap != null ? temps.map(t => shelfAt(t, refCheap)) : [];
+
+            // Cap the visual y-axis so one very cold extrapolation does not make
+            // the useful part of the curve unreadably flat.
+            const maxValue = Math.max(...recValues, ...(cheapValues.length ? cheapValues : [0]), recCold);
+            const yMax = Math.max(10, Math.ceil((maxValue * 1.08) / 10) * 10);
+
+            const width = 900, height = 360;
+            const pad = { left: 68, right: 24, top: 24, bottom: 52 };
+            const innerW = width - pad.left - pad.right;
+            const innerH = height - pad.top - pad.bottom;
+
+            const x = t => pad.left + ((t - minTemp) / (maxTemp - minTemp)) * innerW;
+            const y = v => pad.top + innerH - (Math.min(v, yMax) / yMax) * innerH;
+
+            const pathFor = values => values.map((v, i) =>
+                `${i === 0 ? "M" : "L"} ${x(temps[i]).toFixed(1)} ${y(v).toFixed(1)}`
+            ).join(" ");
+
+            const grid = [];
+            const yTicks = 5;
+            for (let i = 0; i <= yTicks; i++) {
+                const value = (yMax / yTicks) * i;
+                const yy = y(value);
+                grid.push(`<line class="chart-grid" x1="${pad.left}" y1="${yy}" x2="${width-pad.right}" y2="${yy}" stroke="rgba(100,116,139,.16)" stroke-width="1"/>`);
+                grid.push(`<text class="chart-grid-label" x="${pad.left-10}" y="${yy+4}" text-anchor="end" font-size="11" fill="#64748b">${Math.round(value)}d</text>`);
+            }
+
+            temps.forEach(t => {
+                const xx = x(t);
+                grid.push(`<text class="chart-axis-label" x="${xx}" y="${height-20}" text-anchor="middle" font-size="11" fill="#64748b">${t}°</text>`);
+            });
+
+            const refX = x(refTemp);
+            const coldX = x(coldTemp);
+            const refY = y(recShelf);
+            const coldY = y(recCold);
+
+            const recPath = pathFor(recValues);
+            const cheapPath = cheapValues.length ? pathFor(cheapValues) : "";
+
+            chart.innerHTML = `
+                <svg class="shelf-chart-surface w-full h-auto" viewBox="0 0 ${width} ${height}" role="img" aria-label="Shelf life changes with temperature using a Q10 model">
+                    ${grid.join("")}
+                    <line x1="${coldX}" y1="${pad.top}" x2="${coldX}" y2="${pad.top+innerH}" stroke="rgba(16,185,129,.45)" stroke-width="2" stroke-dasharray="6 6"/>
+                    <line x1="${refX}" y1="${pad.top}" x2="${refX}" y2="${pad.top+innerH}" stroke="rgba(245,158,11,.45)" stroke-width="2" stroke-dasharray="4 5"/>
+                    <path d="${recPath}" fill="none" stroke="#10b981" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                    ${cheapPath ? `<path d="${cheapPath}" fill="none" stroke="#f59e0b" stroke-width="3" stroke-dasharray="8 6" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
+                    <circle cx="${refX}" cy="${refY}" r="6" fill="#10b981" stroke="white" stroke-width="3"/>
+                    <circle cx="${coldX}" cy="${coldY}" r="6" fill="#10b981" stroke="white" stroke-width="3"/>
+                    <text x="${coldX+8}" y="${pad.top+15}" font-size="11" font-weight="800" fill="#059669">4°C cold chain</text>
+                    <text x="${refX+8}" y="${pad.top+32}" font-size="11" font-weight="800" fill="#d97706">entered ${refTemp.toFixed(1).replace(".0","")}°C</text>
+                    <text x="${pad.left}" y="15" font-size="11" font-weight="800" fill="#64748b">Estimated shelf life (days)</text>
+                    <text x="${width/2}" y="${height-2}" text-anchor="middle" font-size="11" font-weight="800" fill="#64748b">Storage temperature</text>
+                </svg>
+                <div class="flex flex-wrap items-center gap-4 px-2 pt-2 text-xs font-bold text-slate-500">
+                    <span class="inline-flex items-center gap-2"><span class="w-6 h-1 rounded-full bg-emerald-500"></span>Recommended packaging</span>
+                    ${cheapPath ? `<span class="inline-flex items-center gap-2"><span class="w-6 border-t-2 border-dashed border-amber-500"></span>Cheaper film</span>` : ""}
+                    <span class="text-slate-400">Q10 = ${q10.toFixed(1)}</span>
+                </div>
+            `;
+
+            card.classList.remove("hidden");
+        }
+
         // --- ROI / COST COMPARISON CARD ---
         function populateRoiCard(roi) {
             const card = document.getElementById("roi-card");
@@ -1506,6 +1702,12 @@
             populateConfidenceBadge(roi);
             populateBreakEven(roi);
 
+            const q10Select = document.getElementById("q10-select");
+            if (q10Select) {
+                q10Select.value = String(roi?.q10 || 2);
+                q10Select.onchange = () => populateShelfLifeCurve(roi);
+            }
+
             if (!roi) {
                 card.classList.add("hidden");
                 mapCard.classList.add("hidden");
@@ -1513,6 +1715,7 @@
                 wasteBanner.classList.add("hidden");
                 comparisonCard.classList.add("hidden");
                 document.getElementById("break-even-card").classList.add("hidden");
+                document.getElementById("shelf-life-curve-card").classList.add("hidden");
                 return;
             }
 
@@ -1587,6 +1790,8 @@
                 comparisonCard.classList.add("hidden");
                 rows.innerHTML = "";
             }
+
+            populateShelfLifeCurve(roi);
         }
 
         // --- TRACEABILITY / QR CARD ---
