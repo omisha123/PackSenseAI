@@ -1,0 +1,10 @@
+{
+    "name": "PackSense AI",
+    "short_name": "PackSense",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#07131a",
+    "theme_color": "#059669",
+    "description": "AI-powered food packaging recommendations.",
+    "icons": []
+}
