@@ -341,16 +341,18 @@
                                             </select>
                                         </div>
                                         <div>
-                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="shelf_life">How long should it last?</label>
-                                            <select id="shelf_life" class="input-premium">
-                                                <option value="3" data-key="opt_3days">3 days</option>
-                                                <option value="7" selected data-key="opt_7days">7 days</option>
-                                                <option value="14" data-key="opt_14days">14 days</option>
-                                                <option value="30" data-key="opt_30days">30 days</option>
-                                                <option value="60" data-key="opt_60days">60 days</option>
-                                                <option value="90" data-key="opt_90days">90+ days</option>
-                                            </select>
-                                        </div>
+    <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="shelf_life">How long should it last?</label>
+    <div class="flex gap-2">
+        <input id="shelf_life_num" type="number" min="1" max="3650" step="1" value="7" class="input-premium" style="flex:1 1 0; min-width:0;" placeholder="e.g. 7">
+        <select id="shelf_life_unit" class="input-premium" style="flex:1 1 0; min-width:0;">
+            <option value="days" selected data-key="unit_days">Days</option>
+            <option value="weeks" data-key="unit_weeks">Weeks</option>
+            <option value="months" data-key="unit_months">Months</option>
+            <option value="years" data-key="unit_years">Years</option>
+        </select>
+    </div>
+    <input type="hidden" id="shelf_life" value="7">
+</div>
                                     </div>
                                 </div>
 
@@ -1416,7 +1418,7 @@
         function populateResultMeta() {
             document.getElementById("result-food").innerText = document.getElementById("commodity").value || "—";
             const shelfEl = document.getElementById("shelf_life");
-            document.getElementById("result-shelf").innerText = shelfEl.options[shelfEl.selectedIndex]?.text || "—";
+            document.getElementById("result-shelf").innerText = (window.getShelfLifeLabel ? window.getShelfLifeLabel() : (shelfEl.value + " days"));
             const storageEl = document.getElementById("storage_type");
             document.getElementById("result-storage").innerText = storageEl.options[storageEl.selectedIndex]?.text || "—";
             const budgetEl = document.getElementById("budget");
