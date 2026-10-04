@@ -11,6 +11,8 @@ import time
 import uuid
 import base64
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key_for_mofpi_packaging_app"
@@ -588,20 +590,32 @@ recognizable food item, set "identified" to false, "commodity" to "", other fiel
 and put a short explanation in "note".
 """
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model=MODELS[0],
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt,
-            ],
-        )
-        raw_text = response.text or ""
-    except Exception as e:
+    raw_text = ""
+    last_error = None
+    for model in MODELS:
+        try:
+            client = genai.Client(
+                api_key=api_key,
+                http_options=types.HttpOptions(timeout=20000),  # 20 seconds
+            )
+            response = client.models.generate_content(
+                model=model,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    prompt,
+                ],
+            )
+            raw_text = response.text or ""
+            if raw_text:
+                break
+        except Exception as e:
+            last_error = e
+            print(f"identify-commodity failed on {model}: {e}")
+
+    if not raw_text:
         return jsonify({
             "error": "Could not analyze that photo right now. Please try again in a moment.",
-            "details": str(e)
+            "details": str(last_error)
         }), 503
 
     match = re.search(r"```json\s*(\{.*?\})\s*```", raw_text, re.DOTALL)
@@ -806,4 +820,4 @@ def spec_sheet_route():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)

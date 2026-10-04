@@ -37,13 +37,12 @@
         }
         .theme-overlay { position: fixed; inset: 0; z-index: -1; transition: background-color 0.5s ease; }
         .dark .theme-overlay { background-color: rgba(15, 23, 42, 0.70); }
-        html:not(.dark) .theme-overlay { background-color: rgba(248, 250, 252, 0.85); }
-
+        html:not(.dark) .theme-overlay { background: linear-gradient(135deg, rgba(236, 253, 245, 0.72), rgba(255, 255, 255, 0.5)); }
         .glass {
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 10px 40px rgba(15, 23, 42, 0.14);
         }
         .dark .glass {
             background: rgba(30, 41, 59, 0.7);
@@ -200,7 +199,7 @@
     <div class="theme-overlay"></div>
 
     <!-- Toast notifications (replaces alert() popups) -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 items-end pointer-events-none"></div>
+    <div id="toast-container" class="fixed bottom-5 left-5 z-[100] flex flex-col gap-2 items-end pointer-events-none"></div>
 
     <nav class="glass sticky top-0 z-50 px-6 py-4 border-b">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
@@ -335,9 +334,12 @@
                                                     <span>📷</span>
                                                     <span data-key="photo_upload_label">Or snap/upload a photo instead</span>
                                                 </label>
+                                                <button type="button" id="scan-open-btn" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-sm font-bold shadow-md transition">
+                                                    <span>🔍</span><span>Scan &amp; get packaging plan</span>
+                                                </button>
                                                 <input type="file" id="commodity-photo-input" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden">
                                                 <div id="commodity-photo-preview-wrap" class="hidden items-center gap-2">
-                                                    <img id="commodity-photo-preview" class="w-28.5 h-28.5 rounded-xl object-cover border-2 border-slate-300 dark:border-slate-600 shadow-sm" alt="">
+                                                    <img id="commodity-photo-preview" class="w-28 h-28 rounded-xl object-cover border-2 border-slate-300 dark:border-slate-600 shadow-sm" alt="">
                                                     <button type="button" id="commodity-photo-clear" class="text-base font-bold text-slate-400 hover:text-red-500 px-1" title="Remove photo">✕</button>
                                                 </div>
                                                 <span id="commodity-photo-status" class="text-base font-bold text-slate-600 dark:text-slate-300"></span>
@@ -364,16 +366,18 @@
                                             </select>
                                         </div>
                                         <div>
-                                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="shelf_life">How long should it last?</label>
-                                            <select id="shelf_life" class="input-premium">
-                                                <option value="3" data-key="opt_3days">3 days</option>
-                                                <option value="7" selected data-key="opt_7days">7 days</option>
-                                                <option value="14" data-key="opt_14days">14 days</option>
-                                                <option value="30" data-key="opt_30days">30 days</option>
-                                                <option value="60" data-key="opt_60days">60 days</option>
-                                                <option value="90" data-key="opt_90days">90+ days</option>
-                                            </select>
-                                        </div>
+    <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" data-key="shelf_life">How long should it last?</label>
+    <div class="flex gap-2">
+        <input id="shelf_life_num" type="number" min="1" max="3650" step="1" value="7" class="input-premium" style="flex:1 1 0; min-width:0;" placeholder="e.g. 7">
+        <select id="shelf_life_unit" class="input-premium" style="flex:1 1 0; min-width:0;">
+            <option value="days" selected data-key="unit_days">Days</option>
+            <option value="weeks" data-key="unit_weeks">Weeks</option>
+            <option value="months" data-key="unit_months">Months</option>
+            <option value="years" data-key="unit_years">Years</option>
+        </select>
+    </div>
+    <input type="hidden" id="shelf_life" value="7">
+</div>
                                     </div>
                                 </div>
 
@@ -1494,7 +1498,7 @@
         function populateResultMeta() {
             document.getElementById("result-food").innerText = document.getElementById("commodity").value || "—";
             const shelfEl = document.getElementById("shelf_life");
-            document.getElementById("result-shelf").innerText = shelfEl.options[shelfEl.selectedIndex]?.text || "—";
+            document.getElementById("result-shelf").innerText = (window.getShelfLifeLabel ? window.getShelfLifeLabel() : (shelfEl.value + " days"));
             const storageEl = document.getElementById("storage_type");
             document.getElementById("result-storage").innerText = storageEl.options[storageEl.selectedIndex]?.text || "—";
             const budgetEl = document.getElementById("budget");
@@ -2124,6 +2128,8 @@
                 const lang = document.getElementById('lang-select').value;
                 const dict = i18n[lang] || i18n.English;
 
+                const autoGenerate = window.__scanAutoGenerate === true;
+                window.__scanAutoGenerate = false;
                 commodityPhotoDataUrl = null; // cleared until this photo is confirmed identified below
 
                 if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -2140,7 +2146,8 @@
                     formData.append('image', file);
                     const res = await fetch('/api/identify-commodity', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        signal: AbortSignal.timeout(30000)   // give up after 30 seconds
                     });
                     const data = await res.json();
 
@@ -2192,6 +2199,9 @@
                         template.replace("{commodity}", data.commodity).replace("{note}", data.note || ""),
                         "success"
                     );
+                    if (autoGenerate) {
+                        document.getElementById('btn-generate').click();
+                    }
                 } catch (err) {
                     setStatus("");
                     showToast(dict.toast_photo_network_error || "Network error while analyzing the photo. Please try again.", "error");
@@ -2924,6 +2934,85 @@ document.addEventListener('DOMContentLoaded', () => {
         </span>
     </button>
 </div>
+<!-- ===== LIVE CAMERA SCANNER ===== -->
+<div id="scan-modal" class="hidden fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4">
+  <div class="bg-slate-900 rounded-3xl p-4 w-full max-w-lg text-white shadow-2xl">
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="font-extrabold text-lg">📷 Scan your food item</h3>
+      <button type="button" id="scan-close-btn" class="text-2xl px-2 hover:text-red-400" title="Close">✕</button>
+    </div>
+    <video id="scan-video" class="w-full rounded-2xl bg-black aspect-[4/3] object-cover" autoplay playsinline muted></video>
+    <p id="scan-msg" class="text-sm text-slate-300 mt-2 min-h-[1.25rem]"></p>
+    <div class="flex gap-3 mt-3">
+      <button type="button" id="scan-capture-btn" class="flex-1 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 font-extrabold">Capture &amp; get plan</button>
+      <button type="button" id="scan-cancel-btn" class="px-5 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 font-bold">Cancel</button>
+    </div>
+  </div>
+</div>
 
+<script>
+(function setupLiveScanner() {
+  const openBtn = document.getElementById('scan-open-btn');
+  const modal = document.getElementById('scan-modal');
+  const video = document.getElementById('scan-video');
+  const msg = document.getElementById('scan-msg');
+  const fileInput = document.getElementById('commodity-photo-input');
+  if (!openBtn || !modal || !fileInput) return;
+  let stream = null;
+
+  function stopCamera() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    video.srcObject = null;
+    modal.classList.add('hidden');
+  }
+
+  function sendFileToPipeline(file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+    window.__scanAutoGenerate = true;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  openBtn.addEventListener('click', async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      window.__scanAutoGenerate = true;
+      fileInput.click();
+      return;
+    }
+    modal.classList.remove('hidden');
+    msg.textContent = 'Starting camera...';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      msg.textContent = 'Point at the food item, then tap Capture.';
+    } catch (e) {
+      stopCamera();
+      window.__scanAutoGenerate = true;
+      fileInput.click();
+    }
+  });
+
+  document.getElementById('scan-capture-btn').addEventListener('click', () => {
+    if (!video.videoWidth) { msg.textContent = 'Camera not ready yet, try again.'; return; }
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 1280 / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob => {
+      stopCamera();
+      if (!blob) return;
+      sendFileToPipeline(new File([blob], 'scan.jpg', { type: 'image/jpeg' }));
+    }, 'image/jpeg', 0.9);
+  });
+
+  document.getElementById('scan-close-btn').addEventListener('click', stopCamera);
+  document.getElementById('scan-cancel-btn').addEventListener('click', stopCamera);
+})();
+</script>
 </body>
 </html>
