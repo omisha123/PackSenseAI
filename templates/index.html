@@ -2,7 +2,14 @@
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#059669">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="PackSense AI">
+
+<link rel="manifest" href="/static/manifest.json">
     <title>PackSense AI — Smarter Food Packaging</title>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -177,6 +184,187 @@
         .dark #shelf-life-curve-card .chart-grid { stroke: rgba(148,163,184,.20); }
         .dark #shelf-life-curve-card .shelf-curve-note { color: #000000 !important; }
         @media (max-width: 640px) { .workspace-scroll { max-height: 360px; } }
+        /* ================================
+        MOBILE APP STYLES
+        ================================ */
+
+    html {
+        overscroll-behavior-y: none;
+    }
+
+    body {
+        overflow-x: hidden;
+        -webkit-tap-highlight-color: transparent;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* Prevent iPhone Safari from zooming into inputs */
+    input,
+    select,
+    textarea,
+    button {
+        font-size: 16px;
+    }
+
+    /* Make buttons easier to tap */
+    button,
+    input,
+    select,
+    textarea {
+        touch-action: manipulation;
+    }
+
+    /* ================================
+    MOBILE DEVICES
+    ================================ */
+
+    @media (max-width: 768px) {
+
+        body {
+            width: 100%;
+            min-width: 0;
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        nav {
+            padding-top: calc(10px + env(safe-area-inset-top));
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+
+        /* Main containers */
+        .container,
+        .main-container,
+        .content,
+        main {
+            width: 100%;
+            max-width: 100%;
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+
+        /* Cards */
+        .card {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Inputs */
+        input,
+        select,
+        textarea,
+        .input-premium {
+            width: 100%;
+            max-width: 100%;
+            min-height: 48px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            min-height: 100px;
+        }
+
+        /* Buttons */
+        button {
+            min-height: 48px;
+            padding: 12px 16px;
+        }
+
+        /* Full width mobile buttons */
+        .mobile-full {
+            width: 100%;
+        }
+
+        /* Stack elements vertically */
+        .mobile-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Prevent horizontal overflow */
+        .results,
+        .result-container,
+        .recommendation,
+        .history-container {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        /* Horizontal scrolling sections */
+        .result-nav {
+            max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        .result-nav::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Camera */
+        video {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            object-fit: cover;
+            border-radius: 12px;
+        }
+
+        /* Images */
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Remove hover animations on touch devices */
+        button:hover,
+        a:hover {
+            transform: none;
+        }
+
+        /* Toast */
+        .toast {
+            left: 15px;
+            right: 15px;
+            bottom: calc(15px + env(safe-area-inset-bottom));
+            width: auto;
+        }
+    }
+
+    /* ================================
+    SMALL PHONES
+    ================================ */
+
+    @media (max-width: 480px) {
+
+        h1 {
+            font-size: 28px;
+        }
+
+        h2 {    
+            font-size: 22px;
+        }
+
+        h3 {
+            font-size: 18px;
+        }
+
+        p {
+            font-size: 15px;
+        }
+
+        .container,
+        .main-container,
+        .content,
+        main {
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+    }
     </style>
 </head>
 <body class="text-slate-800 dark:text-slate-100 antialiased transition-colors duration-500">
@@ -3013,6 +3201,22 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('scan-close-btn').addEventListener('click', stopCamera);
   document.getElementById('scan-cancel-btn').addEventListener('click', stopCamera);
 })();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/static/sw.js")
+            .then(function (registration) {
+                console.log("PackSense service worker registered");
+            })
+            .catch(function (error) {
+                console.warn(
+                    "PackSense service worker unavailable:",
+                    error
+                );
+            });
+    });
+}
 </script>
 </body>
 </html>
